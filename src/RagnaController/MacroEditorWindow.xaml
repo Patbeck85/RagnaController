@@ -1,0 +1,127 @@
+<Window x:Class="RagnaController.MacroEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Macro Editor" Width="750" Height="600"
+        Background="{StaticResource BG1Brush}"
+        Foreground="{StaticResource TextHiBrush}"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid Margin="25">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="MACRO EDITOR" FontSize="22" FontWeight="Bold"
+                       Foreground="{StaticResource NeonBrush}"
+                       Effect="{StaticResource NeonGlow}"/>
+            <TextBlock x:Name="MacroInfo" Text="Edit macro steps and timing"
+                       FontSize="11" Foreground="{StaticResource TextLowBrush}"
+                       Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Editor -->
+        <Border Grid.Row="1" Background="{StaticResource BG2Brush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                CornerRadius="8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Macro Name -->
+                <Border Grid.Row="0" Background="{StaticResource BG3Brush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="0,0,0,1" Padding="15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="Name:" VerticalAlignment="Center"
+                                   Margin="0,0,10,0" Foreground="{StaticResource TextLowBrush}"/>
+                        <TextBox Grid.Column="1" x:Name="NameText" Height="32" Padding="8,6"/>
+                        <TextBlock Grid.Column="2" x:Name="DurationText" Text="Duration: 0ms"
+                                   VerticalAlignment="Center" Margin="15,0,0,0"
+                                   Foreground="{StaticResource TextMidBrush}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Steps List -->
+                <DataGrid Grid.Row="1" x:Name="StepsGrid"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          RowBackground="{StaticResource BG2Brush}"
+                          AlternatingRowBackground="{StaticResource BG3Brush}"
+                          GridLinesVisibility="Horizontal"
+                          HorizontalGridLinesBrush="{StaticResource BorderBrush}"
+                          HeadersVisibility="Column"
+                          SelectionMode="Single">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="50" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="120" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="100" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Delay (ms)" Binding="{Binding DelayMs}" Width="*"/>
+                        <DataGridTemplateColumn Header="Actions" Width="200">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="↑" Width="30" Margin="2"
+                                                Style="{StaticResource ConsoleGhostBtn}"
+                                                Click="BtnMoveUp_Click" Tag="{Binding}"/>
+                                        <Button Content="↓" Width="30" Margin="2"
+                                                Style="{StaticResource ConsoleGhostBtn}"
+                                                Click="BtnMoveDown_Click" Tag="{Binding}"/>
+                                        <Button Content="✕" Width="30" Margin="2"
+                                                Style="{StaticResource ConsoleDangerBtn}"
+                                                Click="BtnDeleteStep_Click" Tag="{Binding}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Toolbar -->
+                <Border Grid.Row="2" Background="{StaticResource BG3Brush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="0,1,0,0" Padding="15">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Speed Up (×2)" Width="110" Margin="0,0,8,0"
+                                Style="{StaticResource ConsoleGhostBtn}"
+                                Click="BtnSpeedUp_Click"/>
+                        <Button Content="Slow Down (×2)" Width="120" Margin="0,0,8,0"
+                                Style="{StaticResource ConsoleGhostBtn}"
+                                Click="BtnSlowDown_Click"/>
+                        <Button Content="Optimize" Width="90" Margin="0,0,8,0"
+                                Style="{StaticResource ConsoleGhostBtn}"
+                                Click="BtnOptimize_Click"/>
+                        <TextBlock Text="|" VerticalAlignment="Center" Margin="8,0"
+                                   Foreground="{StaticResource BorderBrush}"/>
+                        <Button Content="Preview" Width="80"
+                                Style="{StaticResource ConsolePrimaryBtn}"
+                                Click="BtnPreview_Click"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Content="Save Changes" Style="{StaticResource ConsolePrimaryBtn}"
+                    Width="130" Margin="0,0,10,0" Click="BtnSave_Click"/>
+            <Button Content="Cancel" Style="{StaticResource ConsoleGhostBtn}"
+                    Width="80" Click="BtnCancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

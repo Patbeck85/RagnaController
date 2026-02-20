@@ -1,0 +1,169 @@
+<Application x:Class="RagnaController.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+
+        <!-- BASE COLORS -->
+        <SolidColorBrush x:Key="BG0Brush"       Color="#080A0F"/>
+        <SolidColorBrush x:Key="BG1Brush"       Color="#0D1017"/>
+        <SolidColorBrush x:Key="BG2Brush"       Color="#131720"/>
+        <SolidColorBrush x:Key="BG3Brush"       Color="#1A2030"/>
+        <SolidColorBrush x:Key="BG4Brush"       Color="#212840"/>
+        <SolidColorBrush x:Key="BorderBrush"    Color="#1E2840"/>
+        <SolidColorBrush x:Key="NeonBrush"      Color="#00CFFF"/>
+        <SolidColorBrush x:Key="NeonDimBrush"   Color="#0080AA"/>
+        <SolidColorBrush x:Key="BtnABrush"      Color="#3DDB6E"/>
+        <SolidColorBrush x:Key="BtnBBrush"      Color="#FF3A52"/>
+        <SolidColorBrush x:Key="BtnXBrush"      Color="#3A8EFF"/>
+        <SolidColorBrush x:Key="BtnYBrush"      Color="#FFB800"/>
+        <SolidColorBrush x:Key="BtnLRBrush"     Color="#9F7AFF"/>
+        <SolidColorBrush x:Key="StateOnBrush"   Color="#3DDB6E"/>
+        <SolidColorBrush x:Key="StateOffBrush"  Color="#FF3A52"/>
+        <SolidColorBrush x:Key="StateWarnBrush" Color="#FFB800"/>
+        <SolidColorBrush x:Key="TextHiBrush"    Color="#EDF0FF"/>
+        <SolidColorBrush x:Key="TextMidBrush"   Color="#8B97CC"/>
+        <SolidColorBrush x:Key="TextLowBrush"   Color="#3D4A6E"/>
+
+        <!-- GRADIENTS -->
+        <LinearGradientBrush x:Key="NeonLineGrad" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#00CFFF" Offset="0"/>
+            <GradientStop Color="#3A8EFF" Offset="0.5"/>
+            <GradientStop Color="#9F7AFF" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="HeaderGrad" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#0A0E16" Offset="0"/>
+            <GradientStop Color="#0E1420" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="CardGrad" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#181E30" Offset="0"/>
+            <GradientStop Color="#0F1420" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- EFFECTS -->
+        <DropShadowEffect x:Key="NeonGlow"   Color="#00CFFF" BlurRadius="16" ShadowDepth="0" Opacity="0.6"/>
+        <DropShadowEffect x:Key="GreenGlow"  Color="#3DDB6E" BlurRadius="14" ShadowDepth="0" Opacity="0.7"/>
+        <DropShadowEffect x:Key="RedGlow"    Color="#FF3A52" BlurRadius="14" ShadowDepth="0" Opacity="0.7"/>
+        <DropShadowEffect x:Key="CardShadow" Color="#000000" BlurRadius="22" ShadowDepth="5" Opacity="0.55"/>
+        <DropShadowEffect x:Key="YellowGlow" Color="#FFB800" BlurRadius="14" ShadowDepth="0" Opacity="0.7"/>
+
+        <!-- PRIMARY BUTTON -->
+        <Style x:Key="ConsolePrimaryBtn" TargetType="Button">
+            <Setter Property="Foreground"       Value="{StaticResource NeonBrush}"/>
+            <Setter Property="Background"       Value="Transparent"/>
+            <Setter Property="BorderBrush"      Value="{StaticResource NeonBrush}"/>
+            <Setter Property="BorderThickness"  Value="1.5"/>
+            <Setter Property="FontSize"         Value="11"/>
+            <Setter Property="FontWeight"       Value="Bold"/>
+            <Setter Property="Padding"          Value="16,9"/>
+            <Setter Property="Cursor"           Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#0A2030"/>
+                                <Setter TargetName="Root" Property="Effect" Value="{StaticResource NeonGlow}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#142840"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource TextLowBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextLowBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- FILLED BUTTON -->
+        <Style x:Key="ConsoleFilledBtn" TargetType="Button" BasedOn="{StaticResource ConsolePrimaryBtn}">
+            <Setter Property="Background"  Value="{StaticResource NeonBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource NeonBrush}"/>
+            <Setter Property="Foreground"  Value="#050709"/>
+        </Style>
+
+        <!-- DANGER BUTTON -->
+        <Style x:Key="ConsoleDangerBtn" TargetType="Button" BasedOn="{StaticResource ConsolePrimaryBtn}">
+            <Setter Property="BorderBrush" Value="{StaticResource StateOffBrush}"/>
+            <Setter Property="Foreground"  Value="{StaticResource StateOffBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Effect" Value="{StaticResource RedGlow}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- GHOST BUTTON -->
+        <Style x:Key="ConsoleGhostBtn" TargetType="Button" BasedOn="{StaticResource ConsolePrimaryBtn}">
+            <Setter Property="BorderBrush" Value="{StaticResource BG4Brush}"/>
+            <Setter Property="Foreground"  Value="{StaticResource TextMidBrush}"/>
+        </Style>
+
+        <!-- INFO BUTTON (Blue) -->
+        <Style x:Key="ConsoleInfoBtn" TargetType="Button" BasedOn="{StaticResource ConsolePrimaryBtn}">
+            <Setter Property="BorderBrush" Value="{StaticResource BtnXBrush}"/>
+            <Setter Property="Foreground"  Value="{StaticResource BtnXBrush}"/>
+        </Style>
+
+        <!-- WARNING BUTTON (Yellow) -->
+        <Style x:Key="ConsoleWarningBtn" TargetType="Button" BasedOn="{StaticResource ConsolePrimaryBtn}">
+            <Setter Property="BorderBrush" Value="{StaticResource BtnYBrush}"/>
+            <Setter Property="Foreground"  Value="{StaticResource BtnYBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Effect" Value="{StaticResource YellowGlow}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- COMBOBOX -->
+        <Style x:Key="ConsoleCombo" TargetType="ComboBox">
+            <Setter Property="Background"       Value="{StaticResource BG3Brush}"/>
+            <Setter Property="Foreground"       Value="{StaticResource TextHiBrush}"/>
+            <Setter Property="BorderBrush"      Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+            <Setter Property="Padding"          Value="10,9"/>
+            <Setter Property="FontSize"         Value="13"/>
+        </Style>
+
+        <!-- THIN SCROLLBAR -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="4"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid>
+                            <Border Background="#1A2030" CornerRadius="2"/>
+                            <Track x:Name="PART_Track" IsDirectionReversed="true">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate>
+                                                <Border Background="#0080AA" CornerRadius="2" Margin="0,2"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Application.Resources>
+</Application>

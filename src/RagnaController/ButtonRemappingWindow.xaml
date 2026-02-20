@@ -1,0 +1,209 @@
+<Window x:Class="RagnaController.ButtonRemappingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Button Remapping" Width="900" Height="650"
+        Background="{StaticResource BG1Brush}"
+        Foreground="{StaticResource TextHiBrush}"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="BUTTON REMAPPING" FontSize="20" FontWeight="Bold"
+                       Foreground="{StaticResource NeonBrush}"
+                       Effect="{StaticResource NeonGlow}"/>
+            <TextBlock Text="Click any button below, then press the controller button you want to bind"
+                       FontSize="11" Foreground="{StaticResource TextLowBrush}"
+                       Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="300"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Controller Visual -->
+            <Border Grid.Column="0" Background="{StaticResource BG2Brush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="8" Padding="20">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Title -->
+                    <TextBlock Grid.Row="0" Text="CONTROLLER PREVIEW"
+                               FontSize="11" FontWeight="Bold"
+                               Foreground="{StaticResource NeonDimBrush}"
+                               Margin="0,0,0,15" HorizontalAlignment="Center"/>
+
+                    <!-- Live Preview -->
+                    <Border Grid.Row="1" x:Name="PreviewContainer"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+                        <!-- Face Buttons -->
+                        <TextBlock Text="FACE BUTTONS" FontSize="12" FontWeight="Bold"
+                                   Foreground="{StaticResource NeonDimBrush}" Margin="0,0,0,10"/>
+                        <UniformGrid Columns="2" Margin="0,0,0,20">
+                            <Button Content="A" Style="{StaticResource ConsolePrimaryBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="A"/>
+                            <Button Content="B" Style="{StaticResource ConsoleDangerBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="B"/>
+                            <Button Content="X" Style="{StaticResource ConsoleInfoBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="X"/>
+                            <Button Content="Y" Style="{StaticResource ConsoleWarningBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="Y"/>
+                        </UniformGrid>
+
+                        <!-- Shoulders -->
+                        <TextBlock Text="SHOULDERS" FontSize="12" FontWeight="Bold"
+                                   Foreground="{StaticResource NeonDimBrush}" Margin="0,0,0,10"/>
+                        <UniformGrid Columns="2" Margin="0,0,0,20">
+                            <Button Content="LB" Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="LeftShoulder"/>
+                            <Button Content="RB" Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="RightShoulder"/>
+                        </UniformGrid>
+
+                        <!-- D-Pad -->
+                        <TextBlock Text="D-PAD" FontSize="12" FontWeight="Bold"
+                                   Foreground="{StaticResource NeonDimBrush}" Margin="0,0,0,10"/>
+                        <UniformGrid Columns="2" Margin="0,0,0,20">
+                            <Button Content="↑" Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="DPadUp"/>
+                            <Button Content="↓" Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="DPadDown"/>
+                            <Button Content="←" Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="DPadLeft"/>
+                            <Button Content="→" Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="DPadRight"/>
+                        </UniformGrid>
+
+                        <!-- Special -->
+                        <TextBlock Text="SPECIAL" FontSize="12" FontWeight="Bold"
+                                   Foreground="{StaticResource NeonDimBrush}" Margin="0,0,0,10"/>
+                        <UniformGrid Columns="2" Margin="0,0,0,20">
+                            <Button Content="Start" Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="Start"/>
+                            <Button Content="Back" Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5" Padding="15" Click="BtnMap_Click" Tag="Back"/>
+                        </UniformGrid>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Mapping Details -->
+            <Border Grid.Column="2" Background="{StaticResource BG2Brush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="8" Padding="15">
+                <StackPanel>
+                    <TextBlock Text="MAPPING DETAILS" FontSize="12" FontWeight="Bold"
+                               Foreground="{StaticResource NeonDimBrush}" Margin="0,0,0,15"/>
+
+                    <!-- Selected Button -->
+                    <TextBlock Text="Selected Button:" FontSize="10"
+                               Foreground="{StaticResource TextLowBrush}"/>
+                    <TextBlock x:Name="SelectedButtonText" Text="None"
+                               FontSize="16" FontWeight="Bold" Margin="0,2,0,15"
+                               Foreground="{StaticResource NeonBrush}"/>
+
+                    <!-- Action Type -->
+                    <TextBlock Text="Action Type:" FontSize="10"
+                               Foreground="{StaticResource TextLowBrush}" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="ActionTypeCombo" Height="32"
+                              SelectionChanged="ActionTypeCombo_SelectionChanged">
+                        <ComboBoxItem Content="Key Press" Tag="Key" IsSelected="True"/>
+                        <ComboBoxItem Content="Left Click" Tag="LeftClick"/>
+                        <ComboBoxItem Content="Right Click" Tag="RightClick"/>
+                        <ComboBoxItem Content="Macro Playback" Tag="Macro"/>
+                    </ComboBox>
+
+                    <!-- Key Selection (visible when Key Press selected) -->
+                    <StackPanel x:Name="KeySelectionPanel" Margin="0,15,0,0">
+                        <TextBlock Text="Key:" FontSize="10"
+                                   Foreground="{StaticResource TextLowBrush}" Margin="0,0,0,5"/>
+                        <ComboBox x:Name="KeyCombo" Height="32"/>
+                        
+                        <TextBlock Text="Or press any key..." FontSize="9"
+                                   Foreground="{StaticResource TextLowBrush}"
+                                   Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Macro Selection (visible when Macro Playback selected) -->
+                    <StackPanel x:Name="MacroSelectionPanel" Margin="0,15,0,0" Visibility="Collapsed">
+                        <TextBlock Text="Macro File:" FontSize="10"
+                                   Foreground="{StaticResource TextLowBrush}" Margin="0,0,0,5"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="MacroPathText" Grid.Column="0" Height="32"
+                                     Padding="8,6" IsReadOnly="True"/>
+                            <Button Grid.Column="1" Content="Browse..." Width="80"
+                                    Style="{StaticResource ConsoleGhostBtn}"
+                                    Margin="5,0,0,0" Click="BtnBrowseMacro_Click"/>
+                        </Grid>
+                        
+                        <TextBlock x:Name="MacroInfoText" Text="No macro selected"
+                                   FontSize="9" Foreground="{StaticResource TextLowBrush}"
+                                   Margin="0,5,0,0"/>
+                        
+                        <Button Content="Record New Macro" Margin="0,10,0,0"
+                                Style="{StaticResource ConsolePrimaryBtn}"
+                                Click="BtnRecordNewMacro_Click"/>
+                    </StackPanel>
+
+                    <!-- Turbo Settings -->
+                    <CheckBox x:Name="TurboCheckbox" Content="Enable Turbo"
+                              Margin="0,20,0,10" Checked="TurboCheckbox_Changed"
+                              Unchecked="TurboCheckbox_Changed"/>
+
+                    <StackPanel x:Name="TurboPanel" Visibility="Collapsed">
+                        <TextBlock Text="Turbo Mode:" FontSize="10"
+                                   Foreground="{StaticResource TextLowBrush}" Margin="0,0,0,5"/>
+                        <ComboBox x:Name="TurboModeCombo" Height="32" Margin="0,0,0,10">
+                            <ComboBoxItem Content="Standard" Tag="Standard" IsSelected="True"/>
+                            <ComboBoxItem Content="Burst" Tag="Burst"/>
+                            <ComboBoxItem Content="Rhythmic" Tag="Rhythmic"/>
+                            <ComboBoxItem Content="Adaptive" Tag="Adaptive"/>
+                        </ComboBox>
+
+                        <TextBlock Text="Interval (ms):" FontSize="10"
+                                   Foreground="{StaticResource TextLowBrush}" Margin="0,0,0,5"/>
+                        <TextBox x:Name="TurboIntervalText" Height="32" Text="100"
+                                 Padding="8,6"/>
+                    </StackPanel>
+
+                    <!-- Action Buttons -->
+                    <Button Content="Apply Mapping" Style="{StaticResource ConsolePrimaryBtn}"
+                            Margin="0,20,0,5" Click="BtnApply_Click"/>
+                    <Button Content="Clear Mapping" Style="{StaticResource ConsoleDangerBtn}"
+                            Click="BtnClear_Click"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Content="Save & Close" Style="{StaticResource ConsolePrimaryBtn}"
+                    Width="120" Margin="0,0,10,0" Click="BtnSave_Click"/>
+            <Button Content="Cancel" Style="{StaticResource ConsoleGhostBtn}"
+                    Width="80" Click="BtnCancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

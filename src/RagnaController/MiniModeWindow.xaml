@@ -1,0 +1,78 @@
+<Window x:Class="RagnaController.MiniModeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="RagnaController Mini"
+        Width="280" Height="120"
+        Background="{StaticResource BG1Brush}"
+        Foreground="{StaticResource TextHiBrush}"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Topmost="True"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Border BorderBrush="{StaticResource NeonBrush}" BorderThickness="1.5" CornerRadius="6"
+            Background="{StaticResource BG1Brush}">
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="StatusDot" Width="8" Height="8" 
+                             VerticalAlignment="Center" Margin="0,0,6,0">
+                        <Ellipse.Fill>
+                            <SolidColorBrush x:Name="StatusColor" Color="#FF3A52"/>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <TextBlock x:Name="ProfileText" Text="MELEE"
+                               FontSize="11" FontWeight="Bold"
+                               CharacterSpacing="100"
+                               Foreground="{StaticResource NeonBrush}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Close button -->
+                <Button Content="✕" Width="20" Height="20"
+                        HorizontalAlignment="Right"
+                        Style="{StaticResource ConsoleDangerBtn}"
+                        Padding="0" FontSize="10"
+                        Click="BtnClose_Click"/>
+            </Grid>
+
+            <!-- Status -->
+            <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,8">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock x:Name="StateIcon" Text="▶"
+                               FontSize="16" Margin="0,0,8,0">
+                        <TextBlock.Foreground>
+                            <SolidColorBrush x:Name="StateIconColor" Color="#FF3A52"/>
+                        </TextBlock.Foreground>
+                    </TextBlock>
+                    <TextBlock x:Name="StateText" Text="IDLE"
+                               FontSize="13" FontWeight="Bold">
+                        <TextBlock.Foreground>
+                            <SolidColorBrush x:Name="StateTextColor" Color="#8B97CC"/>
+                        </TextBlock.Foreground>
+                    </TextBlock>
+                </StackPanel>
+
+                <TextBlock x:Name="HintText" Text="L3 = Toggle Mode"
+                           FontSize="9" Foreground="{StaticResource TextLowBrush}"
+                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            </StackPanel>
+
+            <!-- Footer -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal"
+                        HorizontalAlignment="Center">
+                <TextBlock Text="Ctrl+F = Full Mode  ·  Ctrl+1-4 = Profile"
+                           FontSize="8" Foreground="{StaticResource TextLowBrush}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
