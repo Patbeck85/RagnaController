@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>RagnaController</AssemblyName>
+    <RootNamespace>RagnaController</RootNamespace>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>1.1.0</Version>
+    <Authors>RagnaController Contributors</Authors>
+    <Description>Hybrid Action Controller Layer for Ragnarok Online</Description>
+  </PropertyGroup>
+
+  <!-- Remove auto-generated global usings from UseWindowsForms to avoid WPF type ambiguity.
+       The assemblies are still available; types are accessed via explicit aliases where needed. -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpDX.XInput" Version="4.2.0" />
+    <PackageReference Include="System.Management"  Version="8.0.0" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\icon.ico"            Condition="Exists('Assets\icon.ico')" />
+    <Resource Include="Assets\splash_bg.png"       Condition="Exists('Assets\splash_bg.png')" />
+    <Resource Include="Assets\character_color.png" Condition="Exists('Assets\character_color.png')" />
+    <Resource Include="Assets\character_gray.png"  Condition="Exists('Assets\character_gray.png')" />
+    <Resource Include="Assets\controller.png"      Condition="Exists('Assets\controller.png')" />
+    <Resource Include="Assets\splash_logo.png"    Condition="Exists('Assets\splash_logo.png')" />
+  </ItemGroup>
+
+  <!-- GetDotNet8.bat und GetDS4Windows.bat liegen im Projekt-Root neben der .csproj -->
+  <ItemGroup>
+    <None Include="GetDotNet8.bat"   CopyToOutputDirectory="PreserveNewest"/>
+    <None Include="GetDS4Windows.bat" CopyToOutputDirectory="PreserveNewest"/>
+  </ItemGroup>
+
+  <!-- Nach jedem Publish: BATs kopieren + ZIP erstellen -->
+  <Target Name="CopyBatAfterPublish" AfterTargets="Publish">
+    <Copy
+      SourceFiles="$(MSBuildProjectDirectory)\GetDotNet8.bat"
+      DestinationFolder="$(PublishDir)"
+      SkipUnchangedFiles="true"/>
+    <Copy
+      SourceFiles="$(MSBuildProjectDirectory)\GetDS4Windows.bat"
+      DestinationFolder="$(PublishDir)"
+      SkipUnchangedFiles="true"/>
+    <Message Text="✓ GetDotNet8.bat + GetDS4Windows.bat → $(PublishDir)" Importance="high"/>
+
+    <!-- ZIP erstellen neben der .sln Datei -->
+    <PropertyGroup>
+      <ZipOut>$(MSBuildProjectDirectory)\..\..\..\RagnaController_v$(Version).zip</ZipOut>
+    </PropertyGroup>
+    <Delete Files="$(ZipOut)" Condition="Exists('$(ZipOut)')"/>
+    <Exec Command="powershell -NoProfile -Command &quot;Compress-Archive -Path '$(PublishDir)*' -DestinationPath '$(ZipOut)'&quot;"/>
+    <Message Text="✓ ZIP erstellt: RagnaController_v$(Version).zip" Importance="high"/>
+  </Target>
+
+</Project>
