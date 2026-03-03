@@ -16,9 +16,6 @@ namespace RagnaController.Core
         [DllImport("user32.dll")]
         private static extern uint MapVirtualKey(uint uCode, uint uMapType);
 
-        [DllImport("user32.dll")]
-        private static extern bool SetCursorPos(int x, int y);
-
         private static readonly int InputSize = Marshal.SizeOf<INPUT>();
 
         // Warn once if SendInput is blocked by UIPI (happens when game runs elevated)
@@ -39,10 +36,40 @@ namespace RagnaController.Core
 
         // ── Mouse functions ──────────────────────────────────────────────────────
 
-        /// <summary>Sets the cursor to an exact screen coordinate (important for MovementEngine).</summary>
+        // ── Screen-Auflösung für ABSOLUTE-Normierung (gecacht) ─────────────────
+        private static int _screenW = 0;
+        private static int _screenH = 0;
+
+        private static void EnsureScreenSize()
+        {
+            if (_screenW == 0)
+            {
+                _screenW = GetSystemMetrics(0); // SM_CXSCREEN
+                _screenH = GetSystemMetrics(1); // SM_CYSCREEN
+            }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+
+        /// <summary>
+        /// Bewegt den Cursor auf exakte Bildschirmkoordinaten via SendInput (ABSOLUTE).
+        /// SendInput statt SetCursorPos — beide Pointer (OS + SendInput-intern) bleiben synchron.
+        /// Wichtig für LeftClick() danach: beide müssen dieselbe Position kennen.
+        /// </summary>
         public static void MoveMouseAbsolute(int x, int y)
         {
-            SetCursorPos(x, y);
+            EnsureScreenSize();
+            // SendInput erwartet normierte Koordinaten 0..65535
+            int nx = (int)((x * 65535L) / (_screenW - 1));
+            int ny = (int)((y * 65535L) / (_screenH - 1));
+
+            var inputs = new INPUT[1];
+            inputs[0].type = 0; // Mouse
+            inputs[0].Data.mi.dx = nx;
+            inputs[0].Data.mi.dy = ny;
+            inputs[0].Data.mi.dwFlags = 0x0001 | 0x8000; // MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE
+            SendInput(1, inputs, InputSize);
         }
 
         /// <summary>Moves the cursor relative to its current position.</summary>
@@ -65,11 +92,23 @@ namespace RagnaController.Core
 
         public static void RightClick()
         {
+            RightButtonDown();
+            RightButtonUp();
+        }
+
+        public static void RightButtonDown()
+        {
             var inputs = new INPUT[1];
             inputs[0].type = 0;
-            inputs[0].Data.mi.dwFlags = 0x0008; // RightDown
+            inputs[0].Data.mi.dwFlags = 0x0008; // MOUSEEVENTF_RIGHTDOWN
             CheckSendInput(SendInput(1, inputs, InputSize));
-            inputs[0].Data.mi.dwFlags = 0x0010; // RightUp
+        }
+
+        public static void RightButtonUp()
+        {
+            var inputs = new INPUT[1];
+            inputs[0].type = 0;
+            inputs[0].Data.mi.dwFlags = 0x0010; // MOUSEEVENTF_RIGHTUP
             CheckSendInput(SendInput(1, inputs, InputSize));
         }
 
