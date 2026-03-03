@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace RagnaController.Core
 {
@@ -16,60 +17,17 @@ namespace RagnaController.Core
         [DllImport("user32.dll")]
         private static extern uint MapVirtualKey(uint uCode, uint uMapType);
 
+        [DllImport("user32.dll")]
+        private static extern bool SetCursorPos(int x, int y);
+
         private static readonly int InputSize = Marshal.SizeOf<INPUT>();
-
-        // Warn once if SendInput is blocked by UIPI (happens when game runs elevated)
-        private static bool _uipiWarned = false;
-
-        private static void CheckSendInput(uint result)
-        {
-            if (result == 0 && !_uipiWarned)
-            {
-                _uipiWarned = true;
-                int err = Marshal.GetLastWin32Error();
-                System.Diagnostics.Debug.WriteLine(
-                    $"[InputSimulator] SendInput returned 0 (Win32 error {err}). " +
-                    "If the game runs as Administrator, inputs may be blocked by UIPI. " +
-                    "Run RagnaController as Administrator to fix this.");
-            }
-        }
 
         // ── Mouse functions ──────────────────────────────────────────────────────
 
-        // ── Screen-Auflösung für ABSOLUTE-Normierung (gecacht) ─────────────────
-        private static int _screenW = 0;
-        private static int _screenH = 0;
-
-        private static void EnsureScreenSize()
-        {
-            if (_screenW == 0)
-            {
-                _screenW = GetSystemMetrics(0); // SM_CXSCREEN
-                _screenH = GetSystemMetrics(1); // SM_CYSCREEN
-            }
-        }
-
-        [DllImport("user32.dll")]
-        private static extern int GetSystemMetrics(int nIndex);
-
-        /// <summary>
-        /// Bewegt den Cursor auf exakte Bildschirmkoordinaten via SendInput (ABSOLUTE).
-        /// SendInput statt SetCursorPos — beide Pointer (OS + SendInput-intern) bleiben synchron.
-        /// Wichtig für LeftClick() danach: beide müssen dieselbe Position kennen.
-        /// </summary>
+        /// <summary>Sets the cursor to an exact screen coordinate (important for MovementEngine).</summary>
         public static void MoveMouseAbsolute(int x, int y)
         {
-            EnsureScreenSize();
-            // SendInput erwartet normierte Koordinaten 0..65535
-            int nx = (int)((x * 65535L) / (_screenW - 1));
-            int ny = (int)((y * 65535L) / (_screenH - 1));
-
-            var inputs = new INPUT[1];
-            inputs[0].type = 0; // Mouse
-            inputs[0].Data.mi.dx = nx;
-            inputs[0].Data.mi.dy = ny;
-            inputs[0].Data.mi.dwFlags = 0x0001 | 0x8000; // MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE
-            SendInput(1, inputs, InputSize);
+            SetCursorPos(x, y);
         }
 
         /// <summary>Moves the cursor relative to its current position.</summary>
@@ -80,36 +38,26 @@ namespace RagnaController.Core
             inputs[0].type = 0; // Mouse
             inputs[0].Data.mi.dx = dx;
             inputs[0].Data.mi.dy = dy;
-            inputs[0].Data.mi.dwFlags = 0x0001 | 0x2000; // MOUSEEVENTF_MOVE | MOUSEEVENTF_MOVE_NOCOALESCE
-            CheckSendInput(SendInput(1, inputs, InputSize));
+            inputs[0].Data.mi.dwFlags = 0x0001; // MOUSEEVENTF_MOVE
+            SendInput(1, inputs, InputSize);
         }
 
         public static void LeftClick()
         {
             LeftButtonDown();
+            Thread.Sleep(8); // Minimum hold for RO to register (1 tick at 125fps)
             LeftButtonUp();
         }
 
         public static void RightClick()
         {
-            RightButtonDown();
-            RightButtonUp();
-        }
-
-        public static void RightButtonDown()
-        {
             var inputs = new INPUT[1];
             inputs[0].type = 0;
-            inputs[0].Data.mi.dwFlags = 0x0008; // MOUSEEVENTF_RIGHTDOWN
-            CheckSendInput(SendInput(1, inputs, InputSize));
-        }
-
-        public static void RightButtonUp()
-        {
-            var inputs = new INPUT[1];
-            inputs[0].type = 0;
-            inputs[0].Data.mi.dwFlags = 0x0010; // MOUSEEVENTF_RIGHTUP
-            CheckSendInput(SendInput(1, inputs, InputSize));
+            inputs[0].Data.mi.dwFlags = 0x0008; // RightDown
+            SendInput(1, inputs, InputSize);
+            Thread.Sleep(8); // Minimum hold for RO to register
+            inputs[0].Data.mi.dwFlags = 0x0010; // RightUp
+            SendInput(1, inputs, InputSize);
         }
 
         public static void LeftButtonDown()
@@ -117,7 +65,7 @@ namespace RagnaController.Core
             var inputs = new INPUT[1];
             inputs[0].type = 0;
             inputs[0].Data.mi.dwFlags = 0x0002; // LeftDown
-            CheckSendInput(SendInput(1, inputs, InputSize));
+            SendInput(1, inputs, InputSize);
         }
 
         public static void LeftButtonUp()
@@ -125,7 +73,7 @@ namespace RagnaController.Core
             var inputs = new INPUT[1];
             inputs[0].type = 0;
             inputs[0].Data.mi.dwFlags = 0x0004; // LeftUp
-            CheckSendInput(SendInput(1, inputs, InputSize));
+            SendInput(1, inputs, InputSize);
         }
 
         public static void ScrollWheel(int delta)
@@ -134,7 +82,7 @@ namespace RagnaController.Core
             inputs[0].type = 0;
             inputs[0].Data.mi.dwFlags = 0x0800; // Wheel
             inputs[0].Data.mi.mouseData = (uint)delta;
-            CheckSendInput(SendInput(1, inputs, InputSize));
+            SendInput(1, inputs, InputSize);
         }
 
         // ── Keyboard functions ────────────────────────────────────────────────────
@@ -142,13 +90,16 @@ namespace RagnaController.Core
         public static void DoubleClick()
         {
             LeftClick();
+            System.Threading.Thread.Sleep(16);
             LeftClick();
         }
 
         public static void TapKeyWithModifier(VirtualKey modifier, VirtualKey key)
         {
             KeyDown(modifier);
+            System.Threading.Thread.Sleep(8);
             TapKey(key);
+            System.Threading.Thread.Sleep(8);
             KeyUp(modifier);
         }
 
@@ -156,6 +107,7 @@ namespace RagnaController.Core
         {
             if (key == VirtualKey.None) return;
             KeyDown(key);
+            Thread.Sleep(8);  // Minimum key hold for RO to register
             KeyUp(key);
         }
 
@@ -172,7 +124,7 @@ namespace RagnaController.Core
             if (IsExtendedKey(key)) flags |= 0x0001; // KEYEVENTF_EXTENDEDKEY
 
             inputs[0].Data.ki.dwFlags = flags;
-            CheckSendInput(SendInput(1, inputs, InputSize));
+            SendInput(1, inputs, InputSize);
         }
 
         public static void KeyUp(VirtualKey key)
@@ -187,7 +139,7 @@ namespace RagnaController.Core
             if (IsExtendedKey(key)) flags |= 0x0001;
 
             inputs[0].Data.ki.dwFlags = flags;
-            CheckSendInput(SendInput(1, inputs, InputSize));
+            SendInput(1, inputs, InputSize);
         }
 
         private static bool IsExtendedKey(VirtualKey key)
