@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Speech" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="SharpDX.XInput" Version="4.2.0" />
     <PackageReference Include="System.Management"  Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
@@ -40,6 +44,8 @@
 
   <!-- GetDotNet8.bat und GetDS4Windows.bat liegen im Projekt-Root neben der .csproj -->
   <ItemGroup>
+    <None Include="startup_voice.mp3" CopyToOutputDirectory="PreserveNewest" Condition="Exists('startup_voice.mp3')" />
+    <None Include="startup_voice.wav" CopyToOutputDirectory="PreserveNewest" Condition="Exists('startup_voice.wav')" />
     <None Include="GetDotNet8.bat"   CopyToOutputDirectory="PreserveNewest"/>
     <None Include="GetDS4Windows.bat" CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>

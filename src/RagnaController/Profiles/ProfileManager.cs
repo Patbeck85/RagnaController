@@ -301,7 +301,7 @@ namespace RagnaController.Profiles
                     "F4  → Endure (Toggle)",
                     "F5  → Potion",
                 },
-                "Bash (F1) ist dein Haupt-Angriff.\nEndure (F4) aktivieren wenn viele Gegner dich umzingeln."
+                "Bash (F1) is your main attack.\nActivate Endure (F4) when surrounded by many enemies."
             );
             return p;
         }

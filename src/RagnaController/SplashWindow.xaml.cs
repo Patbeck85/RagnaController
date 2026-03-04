@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
@@ -27,14 +28,17 @@ namespace RagnaController
             InitializeComponent();
             var _splashVer = Assembly.GetExecutingAssembly().GetName().Version;
             SplashVersionLabel.Text = _splashVer != null ? $"v{_splashVer.Major}.{_splashVer.Minor}.{_splashVer.Build}" : "v?";
-            Loaded += OnLoaded;
+            PrepareVoice(); // preload — App.xaml.cs ruft PlayVoice() nach garantiertem Render
+            ContentRendered += (_, _) => OnLoaded(this, new System.Windows.RoutedEventArgs()); // fires after first frame is painted on screen
         }
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
+            // ── Startup voice ─────────────────────────────────────────────────
             // ── Animations starten ───────────────────────────────────────────
             Play("FadeIn");
-            await Delay(300);
+            await Delay(700); // FadeIn dauert 700ms — Splash jetzt voll sichtbar
+            // Voice wird von App.xaml.cs getriggert — nach garantiertem Render
 
             Play("BeamIn");
             await Delay(200);
@@ -102,5 +106,80 @@ namespace RagnaController
 
         private static System.Threading.Tasks.Task Delay(int ms)
             => System.Threading.Tasks.Task.Delay(ms);
+        /// <summary>
+        /// Plays startup_voice.mp3 / .wav next to the .exe (or in app folder).
+        /// Generate the file once via ElevenLabs / Voicemaker / Azure TTS:
+        ///   Text : "RagnaController"
+        ///   Voice: anime female Japanese (e.g. ElevenLabs "Yuna", Voicemaker "Ai-Keiko")
+        ///   Format: MP3 or WAV, save as "startup_voice.mp3" next to RagnaController.exe
+        ///
+        /// Falls back to Windows TTS if no file found.
+        /// </summary>
+        public void PrepareVoice()
+        {
+            // Set the source on the XAML MediaElement — WPF handles buffering automatically.
+            // LoadedBehavior=Manual means it won't play until we call Play().
+            try
+            {
+                string exeDir  = AppDomain.CurrentDomain.BaseDirectory;
+                string mp3Path = System.IO.Path.Combine(exeDir, "startup_voice.mp3");
+                string wavPath = System.IO.Path.Combine(exeDir, "startup_voice.wav");
+                string? audioPath = System.IO.File.Exists(mp3Path) ? mp3Path
+                                  : System.IO.File.Exists(wavPath) ? wavPath
+                                  : null;
+                if (audioPath == null) return;
+
+                VoicePlayer.Source = new Uri(audioPath, UriKind.Absolute);
+                // WPF MediaElement with LoadedBehavior=Manual buffers automatically.
+                // Call PlayVoice() when you want playback to start.
+            }
+            catch { /* never crash splash for audio */ }
+        }
+
+        public void PlayVoice()
+        {
+            // MediaElement.Play() — WPF native, no threading issues, no GC problems.
+            try
+            {
+                VoicePlayer.Play();
+                return;
+            }
+            catch { }
+
+            // Fallback TTS if no file was prepared
+            try
+            {
+
+                // Fallback: Windows TTS (sounds robotic but always works)
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        using var synth = new System.Speech.Synthesis.SpeechSynthesizer();
+
+                        // Try to find a female voice — prefer Japanese/Asian if available
+                        var voices = synth.GetInstalledVoices();
+                        var femaleJp = voices.FirstOrDefault(v =>
+                            v.VoiceInfo.Gender == System.Speech.Synthesis.VoiceGender.Female &&
+                            (v.VoiceInfo.Culture.Name.StartsWith("ja") ||
+                             v.VoiceInfo.Culture.Name.StartsWith("zh")));
+
+                        var femaleAny = voices.FirstOrDefault(v =>
+                            v.VoiceInfo.Gender == System.Speech.Synthesis.VoiceGender.Female);
+
+                        if (femaleJp != null)       synth.SelectVoice(femaleJp.VoiceInfo.Name);
+                        else if (femaleAny != null) synth.SelectVoice(femaleAny.VoiceInfo.Name);
+
+                        synth.Rate   = -1;  // slightly slower = more dramatic
+                        synth.Volume = 85;
+                        synth.Speak("Ragna Controller");
+                    }
+                    catch { /* TTS not available — silent start */ }
+                });
+            }
+            catch { /* Never crash the splash for audio */ }
+        }
+
+
     }
 }

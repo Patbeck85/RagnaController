@@ -206,7 +206,7 @@
                                 ToolTip="Makro aufnehmen und abspielen"/>
                         <Button Content="✨ Wizard" Click="BtnWizard_Click"
                                 Height="28" Padding="8,3"
-                                ToolTip="Neues Profil erstellen"/>
+                                ToolTip="Create new profile"/>
                         <Rectangle Width="1" Fill="#21262D" Margin="6,6,6,6"/>
                         <Button Content="⚙ Settings" Click="BtnSettings_Click"
                                 Height="28" Padding="8,3"
@@ -221,7 +221,7 @@
                     <StackPanel Grid.Column="8" Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- Speichern-Button -->
                         <Button x:Name="BtnSave"
-                                Content="💾  SPEICHERN" Click="BtnSave_Click"
+                                Content="💾  SAVE" Click="BtnSave_Click"
                                 Height="28" Padding="10,3"
                                 Background="#1A2A0A" BorderBrush="#88AA44"
                                 Foreground="#AADD66" FontSize="10" FontWeight="SemiBold"
@@ -409,9 +409,9 @@
                                         <TextBlock Text="SESSION LOG" Foreground="#555E6A"
                                                    FontSize="9" FontWeight="Bold"
                                                    VerticalAlignment="Center" Margin="0,0,12,0"/>
-                                        <Button Content="📋 Exportieren" Click="BtnExportLog_Click"
+                                        <Button Content="📋 Export" Click="BtnExportLog_Click"
                                                 Height="22" Padding="8,2" FontSize="10"/>
-                                        <Button Content="🗑 Leeren" Click="BtnClearLog_Click"
+                                        <Button Content="🗑 Clear" Click="BtnClearLog_Click"
                                                 Height="22" Padding="8,2" FontSize="10" Margin="4,0,0,0"/>
                                     </StackPanel>
                                 </Border>
@@ -479,7 +479,7 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
-                                            <TextBlock Text="A        → Angriff / LMB"  Foreground="#446644" FontFamily="Consolas" FontSize="11"/>
+                                            <TextBlock Text="A        → Attack / LMB"  Foreground="#446644" FontFamily="Consolas" FontSize="11"/>
                                             <TextBlock Text="B        → Enter / Dialog"  Foreground="#446644" FontFamily="Consolas" FontSize="11"/>
                                             <TextBlock Text="X (Hold) → Alt – Items"     Foreground="#446644" FontFamily="Consolas" FontSize="11"/>
                                             <TextBlock Text="Y        → Sitzen"          Foreground="#446644" FontFamily="Consolas" FontSize="11"/>

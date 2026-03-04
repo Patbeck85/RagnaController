@@ -49,6 +49,12 @@ namespace RagnaController
                 var splash = new SplashWindow();
                 splash.Show();
 
+                // Wait until FadeIn (700ms) + Windows compositor delay (~500ms) = 1200ms
+                // Only then play startup voice — splash is guaranteed visible on screen
+                _ = Task.Delay(1200).ContinueWith(_ => 
+                    Application.Current.Dispatcher.Invoke(() => splash.PlayVoice()),
+                    System.Threading.Tasks.TaskContinuationOptions.None);
+
                 // ── 5 Sekunden Splash anzeigen ───────────────────────────────
                 // (Animationen laufen komplett durch: Logo-Pop ~0.7s, alle Partikel, Progress ~3.8s)
                 await Task.Delay(5000);

@@ -87,7 +87,8 @@ namespace RagnaController
                 if (matchingItem != null) KeyCombo.SelectedItem = matchingItem;
             }
 
-            TurboCheckbox.IsChecked = action.TurboEnabled;
+            TurboCheckbox.IsChecked       = action.TurboEnabled;
+            GroundSpellCheckbox.IsChecked = action.IsGroundSpell;
             TurboIntervalText.Text = action.TurboIntervalMs.ToString();
             TurboModeCombo.SelectedIndex = action.Mode switch
             {
@@ -102,7 +103,8 @@ namespace RagnaController
         {
             ActionTypeCombo.SelectedIndex = 0;
             KeyCombo.SelectedIndex = 0;
-            TurboCheckbox.IsChecked = false;
+            TurboCheckbox.IsChecked       = false;
+            GroundSpellCheckbox.IsChecked = false;
             TurboIntervalText.Text = "100";
         }
 
@@ -159,6 +161,12 @@ namespace RagnaController
                 TurboPanel.Visibility = (TurboCheckbox.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
         }
 
+
+        private void GroundSpellCheckbox_Changed(object sender, RoutedEventArgs e)
+        {
+            // No extra panel needed — just a simple on/off flag
+            // Visual feedback: dim the checkbox label if not in Mage mode
+        }
         private bool ApplyMappingCore()
         {
             if (_selectedButton == null) return false;
@@ -186,7 +194,8 @@ namespace RagnaController
             }
             else
             {
-                action.TurboEnabled   = TurboCheckbox.IsChecked == true;
+                action.TurboEnabled   = TurboCheckbox.IsChecked    == true;
+                action.IsGroundSpell  = GroundSpellCheckbox.IsChecked == true;
                 action.Mode           = GetSelectedTurboMode();
                 if (int.TryParse(TurboIntervalText.Text, out int interval))
                     action.TurboIntervalMs = Math.Max(30, interval);

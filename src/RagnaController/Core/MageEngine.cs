@@ -4,244 +4,337 @@ using RagnaController.Core;
 namespace RagnaController.Core
 {
     /// <summary>
-    /// Mage Combat Engine — Ground-target spells and Bolt spam for Wizard/Sage in RO.
+    /// Mage Engine — Ground-target spells and Bolt spam.
     ///
-    /// ── Two modes ────────────────────────────────────────────────────────────────
+    /// ── GROUND SPELL FLOW ────────────────────────────────────────────────────────
     ///
-    /// 1. GROUND-TARGET MODE (Storm Gust, Meteor Storm, Lord of Vermillion, etc.)
-    ///    - Right stick → move cursor to target location on ground
-    ///    - R3 (RS click) → Left-Click ground + instantly fire spell key
-    ///    - Result: AoE spell cast at cursor position
+    ///   1. Player holds L2 or R2
+    ///   2. Presses A / B / X / Y  →  CombatEngine sends spell key to RO
+    ///                                 CombatEngine fires GroundSpellFired event
+    ///                                 HybridEngine calls MageEngine.EnterGroundAim()
+    ///   3. Movement stops immediately
+    ///      Right stick = cursor control for targeting
+    ///      GetCursor() watches for RO's ground-target crosshair
+    ///   4. Player releases L2 / R2  →  LeftClick places the spell
+    ///      Left stick resumes walking immediately
     ///
-    /// 2. BOLT-SPAM MODE (Fire Bolt, Cold Bolt, Lightning Bolt, etc.)
-    ///    - Right stick → aim at monster (move cursor)
-    ///    - R3 → Right-click lock + auto-spam bolt key with cast delay
-    ///    - Respects cast time (e.g. Fire Bolt Lv10 = ~1.2s cast)
+    /// ── BOLT MODE ────────────────────────────────────────────────────────────────
     ///
-    /// ── Controller mapping ──────────────────────────────────────────────────────
+    ///   R2 held (without combo press) → right stick aims, R3 locks + auto-bolts
     ///
-    ///   L3 (LS click)       = Toggle Mage mode ON/OFF
-    ///   Right Stick         = Cursor positioning (aim / ground target)
-    ///   R3 (RS click)       = GROUND: place spell  |  BOLT: lock + spam
-    ///   R2 (held)           = Switch to BOLT mode (default is GROUND mode)
-    ///   L2 (held)           = Quick-cast defensive (Safety Wall / Ice Wall)
-    ///   D-Pad               = Manual skills (utility)
+    /// ── LAYOUT ──────────────────────────────────────────────────────────────────
     ///
-    /// ── Cast delay handling ─────────────────────────────────────────────────────
-    ///
-    /// RO has cast times for all bolt spells. We simulate this by spacing key presses:
-    ///   - Fire Bolt Lv10:     1200ms cast + 50ms for next
-    ///   - Cold Bolt Lv10:     1000ms
-    ///   - Lightning Bolt Lv10: 800ms
-    ///   - Default:            1000ms
-    ///
-    /// After casting, we wait CastDelayMs before firing next bolt.
-    ///
-    /// ── SP Management hint ──────────────────────────────────────────────────────
-    ///
-    /// No memory read, but we COUNT casts. After X casts → UI hint "Low SP?"
-    /// User can manually pot or retreat.
+    ///   L3             = Toggle Mage mode ON/OFF
+    ///   Left Stick     = Walk (always — even in Mage mode)
+    ///   Right Stick    = Cursor (only while ground-aiming or bolt mode)
+    ///   L1 + A/B/X/Y  = Ground spell → aim → release L1 to cast
+    ///   L2 + A/B/X/Y  = Ground spell → aim → release L2 to cast
+    ///   R1 + A/B/X/Y  = Ground spell → aim → release R1 to cast
+    ///   R2 + A/B/X/Y  = Ground spell → aim → release R2 to cast
+    ///   R2 alone       = Bolt mode
+    ///   R3             = Ground-aim: CANCEL (sends ESC to RO) | Bolt: lock target + spam
+    ///   R1 (held)      = Fine-Aim: half cursor speed for precision targeting
+    ///   L1             = Quick defensive cast (Safety Wall / Ice Wall)
     ///
     /// </summary>
     public class MageEngine
     {
+        // ── Win32 ─────────────────────────────────────────────────────────────────
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr GetCursor();
+
         // ── Config ────────────────────────────────────────────────────────────────
-        public bool  MageEnabled           { get; set; } = false;
+        public bool  MageEnabled          { get; set; } = false;
 
-        // Ground-target mode
-        public int   GroundSpellKeyVK      { get; set; } = 0x5A;  // Z = Storm Gust default
-        public float GroundAimSensitivity  { get; set; } = 18f;
-        public float GroundAimDeadzone     { get; set; } = 0.15f;
-
-        // Bolt-spam mode
-        public int   BoltKeyVK             { get; set; } = 0x56;  // V = Fire Bolt default
-        public int   BoltCastDelayMs       { get; set; } = 1200;  // Fire Bolt Lv10 cast time
-        public float BoltAimSensitivity    { get; set; } = 20f;
-
-        // Defensive quick-cast
-        public int   DefensiveKeyVK        { get; set; } = 0x43;  // C = Safety Wall / Ice Wall
-        public int   DefensiveCooldownMs   { get; set; } = 800;
-
-        // SP hint
-        public int   CastsBeforeSPWarning  { get; set; } = 15;
+        /// <summary>
+        /// VK of the ground spell key — kept for profile compatibility.
+        /// CombatEngine sends the key; this is used as fallback if needed.
+        /// </summary>
+        public int   GroundSpellKeyVK     { get; set; } = 0x5A;  // Z default
+        public float GroundAimSensitivity { get; set; } = 18f;
+        public float GroundAimDeadzone    { get; set; } = 0.15f;
+        public int   BoltKeyVK            { get; set; } = 0x56;   // V default
+        public int   BoltCastDelayMs      { get; set; } = 1200;
+        public float BoltAimSensitivity   { get; set; } = 20f;
+        public int   DefensiveKeyVK       { get; set; } = 0x43;   // C default
+        public int   DefensiveCooldownMs  { get; set; } = 800;
+        public int   CastsBeforeSPWarning { get; set; } = 15;
 
         // ── State ─────────────────────────────────────────────────────────────────
-        public bool       IsActive         { get; private set; } = false;
-        public MageMode   Mode             { get; private set; } = MageMode.Ground;
-        public MagePhase  Phase            { get; private set; } = MagePhase.Idle;
+        public bool      IsActive        { get; private set; } = false;
+        public MageMode  Mode            { get; private set; } = MageMode.Idle;
+        public MagePhase Phase           { get; private set; } = MagePhase.Idle;
+
+        /// <summary>True while holding L2/R2 after a ground-spell combo. Suppresses movement.</summary>
+        public bool GroundAimHeld        { get; private set; } = false;
+
+        /// <summary>True when RO cursor changed to ground-target crosshair.</summary>
+        public bool GroundSpellPending   { get; private set; } = false;
 
         public string PhaseLabel => Phase switch
         {
-            MagePhase.Aiming        => Mode == MageMode.Ground ? "AIMING GROUND" : "AIMING BOLT",
-            MagePhase.Casting       => "CASTING",
+            MagePhase.GroundAiming  => "GROUND AIM ▶ Release to cast",
+            MagePhase.Casting       => "CASTING...",
             MagePhase.BoltLocked    => "BOLT LOCKED",
-            MagePhase.BoltSpamming  => "BOLT SPAMMING",
-            _                       => "IDLE"
+            MagePhase.BoltSpamming  => "BOLT SPAM",
+            _                       => IsActive ? "MAGE READY" : "IDLE"
         };
 
-        public int CastCount { get; private set; } = 0;
-        public bool SPWarning => CastCount >= CastsBeforeSPWarning;
+        public int  CastCount  { get; private set; } = 0;
+        public bool SPWarning  => CastCount >= CastsBeforeSPWarning;
 
         // Events
         public event Action<MagePhase>? PhaseChanged;
 
         // ── Internal ──────────────────────────────────────────────────────────────
-        private int   _castCooldown        = 0;
-        private int   _defensiveCooldown   = 0;
-        private float _aimX, _aimY;
-        private bool  _prevR3              = false;
-        private bool  _prevL2              = false;
+        private int   _castCooldown       = 0;
+        private int   _defensiveCooldown  = 0;
+        private bool  _prevR3             = false;
+        private bool  _prevL1             = false;
+        private bool  _prevL2             = false;
+        private bool  _prevR2             = false;
+
+        // Which trigger started ground-aim (so we detect the right release)
+        private bool  _groundAimFromL2    = false;
+        private bool  _groundAimFromR2    = false;
+        private bool  _groundAimFromL1    = false;
+        private bool  _groundAimFromR1    = false;
+
+        // Cursor detection
+        private IntPtr _normalCursor      = IntPtr.Zero;
+        private bool   _cursorCalibrated  = false;
+        private int    _cursorWaitMs      = 0;
 
         // ── Public control ────────────────────────────────────────────────────────
 
         public void ToggleMageMode()
         {
             IsActive = !IsActive;
-            if (IsActive)
-                SetPhase(MagePhase.Aiming);
-            else
+            if (!IsActive)
             {
                 SetPhase(MagePhase.Idle);
-                CastCount = 0;
+                Mode          = MageMode.Idle;
+                GroundAimHeld = false;
+                CastCount     = 0;
             }
         }
 
         public void ResetCastCount() => CastCount = 0;
 
+        /// <summary>
+        /// Called by HybridEngine when a face button (A/B/X/Y) is pressed in Mage mode.
+        /// If ground-aim was triggered via CombatEngine's GroundSpellFired event, this is a no-op.
+        /// Otherwise provides a hook for future extensions (SP tracking, feedback etc.)
+        /// </summary>
+        public void NotifySkillFired()
+        {
+            // CastCount is already incremented in CastGroundSpell / bolt spam.
+            // This is intentionally lightweight — the real work is done via EnterGroundAim.
+        }
+
+        /// <summary>Re-learn the normal cursor handle (call after Alt+Tab).</summary>
+        public void RecalibrateCursor()
+        {
+            _cursorCalibrated = false;
+            _normalCursor     = IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// Called by HybridEngine when CombatEngine fires a ground-spell combo.
+        /// The spell key was already sent — now we enter targeting mode.
+        /// </summary>
+        public void EnterGroundAim(bool fromL2, bool fromR2, bool fromL1 = false, bool fromR1 = false)
+        {
+            if (!IsActive) return;
+            GroundAimHeld      = true;
+            _groundAimFromL2   = fromL2;
+            _groundAimFromR2   = fromR2;
+            _groundAimFromL1   = fromL1;
+            _groundAimFromR1   = fromR1;
+            Mode               = MageMode.Ground;
+            _cursorWaitMs      = 120;
+            SetPhase(MagePhase.GroundAiming);
+        }
+
         // ── Main Update ───────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Call every engine tick (16ms).
-        /// rightX/Y  = right stick
-        /// r3        = right stick button (place spell / lock target)
-        /// r2Held    = R2 trigger (switch to bolt mode)
-        /// l2Held    = L2 trigger (quick defensive cast)
-        /// tickMs    = tick interval (16)
+        /// Call every tick (16ms).
+        /// Returns true if left-stick movement should be suppressed.
         /// </summary>
-        public void Update(float rightX, float rightY, bool r3, bool r2Held, bool l2Held, int tickMs)
+        public bool Update(float rightX, float rightY,
+                           bool r3, bool r2Held, bool l2Held, bool l1Held, bool r1Held, int tickMs)
         {
-            if (!IsActive) return;
+            if (!IsActive) return false;
 
-            // Mode switching: R2 held = Bolt mode, released = Ground mode
-            var prevMode = Mode;
-            Mode = r2Held ? MageMode.Bolt : MageMode.Ground;
+            UpdateCursorDetection(tickMs);
 
-            // If we were bolt-spamming and just released R2 → stop spam, return to Aiming
-            if (prevMode == MageMode.Bolt && Mode == MageMode.Ground
-                && (Phase == MagePhase.BoltSpamming || Phase == MagePhase.BoltLocked))
-            {
-                SetPhase(MagePhase.Aiming);
-            }
-
-            // Process aim input
-            float mag = MathF.Sqrt(rightX * rightX + rightY * rightY);
-            float deadzone = Mode == MageMode.Ground ? GroundAimDeadzone : 0.15f;
-            float sens     = Mode == MageMode.Ground ? GroundAimSensitivity : BoltAimSensitivity;
-
-            if (mag > deadzone)
-            {
-                float norm = (mag - deadzone) / (1f - deadzone);
-                _aimX = rightX / mag * norm;
-                _aimY = rightY / mag * norm;
-            }
-            else
-            {
-                _aimX = 0f;
-                _aimY = 0f;
-            }
-
-            // Move cursor based on aim
-            if (_aimX != 0 || _aimY != 0)
-            {
-                int mx = (int)(_aimX * sens);
-                int my = (int)(-_aimY * sens); // Y inverted
-                if (mx != 0 || my != 0)
-                    InputSimulator.MoveMouseRelative(mx, my);
-            }
-
-            // Tick cooldowns
             _castCooldown      = Math.Max(0, _castCooldown - tickMs);
             _defensiveCooldown = Math.Max(0, _defensiveCooldown - tickMs);
 
-            // ── L2: Quick defensive cast ─────────────────────────────────────────
-            if (l2Held && !_prevL2 && _defensiveCooldown <= 0)
+            // ── L1: Quick defensive cast ──────────────────────────────────────────
+            if (l1Held && !_prevL1 && _defensiveCooldown <= 0)
             {
-                QuickDefensiveCast();
+                InputSimulator.TapKey((VirtualKey)DefensiveKeyVK);
+                _defensiveCooldown = DefensiveCooldownMs;
+                CastCount++;
             }
-            _prevL2 = l2Held;
+            _prevL1 = l1Held;
 
-            // ── R3: Spell placement / bolt lock ──────────────────────────────────
-            if (r3 && !_prevR3)
+            // ── Ground-aim active: check for trigger release → cast ───────────────
+            if (GroundAimHeld)
             {
-                if (Mode == MageMode.Ground)
-                    PlaceGroundSpell();
-                else
-                    LockAndBolt();
+                bool triggerReleased = (_groundAimFromL2 && !l2Held)
+                                    || (_groundAimFromR2 && !r2Held)
+                                    || (_groundAimFromL1 && !l1Held)
+                                    || (_groundAimFromR1 && !r1Held);
+
+                if (triggerReleased)
+                {
+                    // Trigger released → place the spell
+                    CastGroundSpell();
+                    _prevR3 = r3;
+                    _prevL2 = l2Held;
+                    _prevR2 = r2Held;
+                    return false; // movement resumes
+                }
+
+                    // R3 (RS click) while aiming = Cancel without casting
+                if (r3 && !_prevR3)
+                {
+                    CancelGroundAim();
+                    _prevR3 = r3;
+                    _prevL2 = l2Held;
+                    _prevR2 = r2Held;
+                    return false;
+                }
+
+                // Fine-Aim: R1 held = half cursor speed for precision targeting
+                float aimMult = r1Held ? 0.5f : 1.0f;
+                MoveAimCursor(rightX, rightY, GroundAimSensitivity * aimMult, GroundAimDeadzone);
+                _prevR3 = r3;
+                _prevL2 = l2Held;
+                _prevR2 = r2Held;
+                return true; // suppress left stick
             }
-            _prevR3 = r3;
 
-            // ── State machine ────────────────────────────────────────────────────
-            switch (Phase)
+            // ── Casting cooldown ──────────────────────────────────────────────────
+            if (Phase == MagePhase.Casting)
             {
-                case MagePhase.Aiming:
-                    // Just aiming, waiting for R3
-                    break;
+                if (_castCooldown <= 0) SetPhase(MagePhase.Idle);
+                _prevR3 = r3; _prevL2 = l2Held; _prevR2 = r2Held;
+                return false;
+            }
 
-                case MagePhase.Casting:
-                    // Single ground cast animation wait
-                    if (_castCooldown <= 0)
-                        SetPhase(MagePhase.Aiming);
-                    break;
+            // ── Bolt mode: R2 held without ground-aim ─────────────────────────────
+            if (r2Held && !_groundAimFromR2)
+            {
+                Mode = MageMode.Bolt;
 
-                case MagePhase.BoltLocked:
-                    // Locked on target, entering spam phase
+                MoveAimCursor(rightX, rightY, BoltAimSensitivity, 0.15f);
+
+                if (r3 && !_prevR3)
+                {
+                    InputSimulator.RightClick();
+                    SetPhase(MagePhase.BoltLocked);
+                }
+
+                if (Phase == MagePhase.BoltLocked)
                     SetPhase(MagePhase.BoltSpamming);
-                    break;
 
-                case MagePhase.BoltSpamming:
-                    UpdateBoltSpam(tickMs);
-                    break;
+                if (Phase == MagePhase.BoltSpamming && _castCooldown <= 0)
+                {
+                    InputSimulator.TapKey((VirtualKey)BoltKeyVK);
+                    _castCooldown = BoltCastDelayMs;
+                    CastCount++;
+                }
+
+                _prevR3 = r3; _prevL2 = l2Held; _prevR2 = r2Held;
+                return false; // can still walk in bolt mode
             }
+            else if (!r2Held && (Phase == MagePhase.BoltSpamming || Phase == MagePhase.BoltLocked))
+            {
+                // R2 released outside ground-aim → stop bolt
+                SetPhase(MagePhase.Idle);
+                Mode = MageMode.Idle;
+            }
+
+            _prevR3 = r3; _prevL2 = l2Held; _prevR2 = r2Held;
+            return false;
         }
 
         // ── Actions ───────────────────────────────────────────────────────────────
 
-        private void PlaceGroundSpell()
+        private void CastGroundSpell()
         {
-            // Left-click ground at cursor, then immediately fire spell key
+            // Spell key was already sent by CombatEngine on button press.
+            // GetCursor() confirms if RO shows the crosshair:
+            //   GroundSpellPending = true  → crosshair visible, LeftClick places it
+            //   GroundSpellPending = false → RO may still be reacting; click anyway
             InputSimulator.LeftClick();
-            InputSimulator.TapKey((VirtualKey)GroundSpellKeyVK);
 
-            _castCooldown = 600; // Brief animation lock
+            _castCooldown      = 800;
+            _groundAimFromL2   = false;
+            _groundAimFromR2   = false;
+            _groundAimFromL1   = false;
+            _groundAimFromR1   = false;
+            GroundAimHeld      = false;
             CastCount++;
             SetPhase(MagePhase.Casting);
+            Mode = MageMode.Idle;
         }
 
-        private void LockAndBolt()
+        private void CancelGroundAim()
         {
-            // Right-click to lock monster, then enter bolt spam
-            InputSimulator.RightClick();
-            SetPhase(MagePhase.BoltLocked);
+            // ESC tells RO to cancel the pending ground placement
+            InputSimulator.TapKey(VirtualKey.Escape);
+            _groundAimFromL2   = false;
+            _groundAimFromR2   = false;
+            _groundAimFromL1   = false;
+            _groundAimFromR1   = false;
+            GroundAimHeld      = false;
+            GroundSpellPending = false;
+            SetPhase(MagePhase.Idle);
+            Mode = MageMode.Idle;
         }
 
-        private void UpdateBoltSpam(int tickMs)
+        private void MoveAimCursor(float rx, float ry,
+                                   float sensitivity = -1f, float deadzone = -1f)
         {
-            // Auto-fire bolt key with cast delay
-            if (_castCooldown <= 0)
+            if (sensitivity < 0) sensitivity = GroundAimSensitivity;
+            if (deadzone    < 0) deadzone    = GroundAimDeadzone;
+
+            float mag = MathF.Sqrt(rx * rx + ry * ry);
+            if (mag <= deadzone) return;
+
+            float norm = (mag - deadzone) / (1f - deadzone);
+            int mx = (int)(rx / mag * norm * sensitivity);
+            int my = (int)(-ry / mag * norm * sensitivity);
+            if (mx != 0 || my != 0)
+                InputSimulator.MoveMouseRelative(mx, my);
+        }
+
+        // ── Cursor Detection ──────────────────────────────────────────────────────
+
+        private void UpdateCursorDetection(int tickMs)
+        {
+            IntPtr cur = GetCursor();
+
+            if (!_cursorCalibrated)
             {
-                InputSimulator.TapKey((VirtualKey)BoltKeyVK);
-                _castCooldown = BoltCastDelayMs;
-                CastCount++;
+                _normalCursor     = cur;
+                _cursorCalibrated = true;
+                GroundSpellPending = false;
+                return;
             }
-        }
 
-        private void QuickDefensiveCast()
-        {
-            // Fire defensive skill (Safety Wall on self, Ice Wall behind, etc.)
-            // User configures which key this is
-            InputSimulator.TapKey((VirtualKey)DefensiveKeyVK);
-            _defensiveCooldown = DefensiveCooldownMs;
-            CastCount++;
+            if (_cursorWaitMs > 0)
+            {
+                _cursorWaitMs = Math.Max(0, _cursorWaitMs - tickMs);
+                return;
+            }
+
+            GroundSpellPending = (cur != _normalCursor && cur != IntPtr.Zero);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────────
@@ -253,20 +346,6 @@ namespace RagnaController.Core
         }
     }
 
-    // ── Enums ─────────────────────────────────────────────────────────────────────
-
-    public enum MageMode
-    {
-        Ground,  // Ground-target AoE placement
-        Bolt     // Bolt spam on locked target
-    }
-
-    public enum MagePhase
-    {
-        Idle,
-        Aiming,        // Moving cursor to target
-        Casting,       // Cast animation for ground spell
-        BoltLocked,    // Just locked target for bolt
-        BoltSpamming   // Auto-firing bolts
-    }
+    public enum MageMode  { Idle, Ground, Bolt }
+    public enum MagePhase { Idle, GroundAiming, Casting, BoltLocked, BoltSpamming }
 }

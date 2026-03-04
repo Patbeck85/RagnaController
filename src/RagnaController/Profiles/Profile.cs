@@ -26,25 +26,18 @@ namespace RagnaController.Profiles
         public float CursorCurve       { get; set; } = 1.5f;
 
         // ── Movement Feel ─────────────────────────────────────────────────────────
-        /// Coast frames after stick release. 0 = instant stop, 2 = mini coast.
-        public int   MovementCoastFrames  { get; set; } = 2;
+        /// Coast frames after stick release. 0 = instant stop, 3 = smooth coast (Original).
+        public int   MovementCoastFrames  { get; set; } = 3;
 
         /// True = Action RPG: LS holds LMB + moves cursor.
         public bool  ActionRpgMode        { get; set; } = true;
         public float ActionSpeed          { get; set; } = 5.0f;
 
-        /// 0 = Classic (Potenz-Kurve), 1 = DualZone (Fein+Snap, empfohlen für Mobben).
+        /// 0 = Classic (Potenz-Kurve, Original), 1 = DualZone (Fein+Snap).
         public int   MovementCurveMode    { get; set; } = 1;
 
-        /// Click-Cooldown bei voller Auslenkung (ms). Default 50 = 20 Klicks/s.
-        public int   ClickCooldownMs      { get; set; } = 50;
-
-        /// Maximaler Click-Cooldown auch bei sehr geringem Stick (ms). Default 120.
-        public int   ClickCooldownMaxMs   { get; set; } = 120;
-
-        /// Forward-Bias: Cursor-Vorsprung bei hoher Geschwindigkeit (0..1).
-        /// 0.35 = bei Vollgas 35% weiter voraus → Charakter läuft weiter durch Mobs.
-        public float MovementForwardBias  { get; set; } = 0.35f;
+        /// Click-Cooldown bei voller Auslenkung (ms). Default 80 = Original.
+        public int   ClickCooldownMs      { get; set; } = 80;
 
         // ── Mob-Sweep Mode ────────────────────────────────────────────────────────
         /// R2 + LS = während des Laufens automatisch TAB-Cycle + Angriff.

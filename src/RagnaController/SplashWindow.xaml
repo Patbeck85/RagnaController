@@ -421,6 +421,13 @@
                            Margin="0,5,2,0"/>
             </StackPanel>
 
+        <!-- Startup voice — LoadedBehavior=Manual so we control Play() timing exactly -->
+        <MediaElement x:Name="VoicePlayer"
+                      LoadedBehavior="Manual"
+                      UnloadedBehavior="Stop"
+                      Visibility="Collapsed"
+                      Volume="0.85"/>
+
         </Grid>
     </Border>
 </Window>

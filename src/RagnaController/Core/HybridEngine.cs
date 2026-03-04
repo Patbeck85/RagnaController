@@ -62,7 +62,16 @@ namespace RagnaController.Core
             _feedback = new FeedbackSystem(_ctrl);
 
             // Skill fired → short rumble on right motor
-            _combat.ActionFired += _ => _feedback.TriggerSkillFired();
+            _combat.ActionFired    += _ => _feedback.TriggerSkillFired();
+
+            // Ground spell button combo (L2+A etc.) fired → enter ground-aim mode.
+            // CombatEngine already sent the spell key; now MageEngine takes over:
+            // movement stops, RS = cursor, release L2/R2 = LeftClick to place.
+            _combat.GroundSpellFired += () =>
+            {
+                if (_mage.IsActive)
+                    _mage.EnterGroundAim(fromL2: _curL2, fromR2: _curR2, fromL1: _curL1, fromR1: _curR1);
+            };
         }
 
         public void Start()
@@ -111,9 +120,13 @@ namespace RagnaController.Core
         public void LiveUpdateDeadzone   (float v) { _movement.Deadzone   = v; }
         public void LiveUpdateCurve      (float v) { _movement.Curve      = v; }
         public void LiveUpdateActionSpeed(float v) { _movement.LeashRadius = (int)(v * 36f); }
-        public void LiveUpdateCursorSpeed   (float v) { _cursor.MaxSpeed         = v; }
-        public void LiveUpdateForwardBias   (float v) { _movement.ForwardBias       = v; }
-        public void LiveUpdateClickCooldown (int   v) { _movement.ClickCooldownMs   = v; }
+        public void LiveUpdateCursorSpeed(float v) { _cursor.MaxSpeed = v; }
+
+        /// <summary>
+        /// Nach Alt+Tab oder Fenster-Fokus-Wechsel aufrufen.
+        /// Lässt MageEngine den normalen Cursor neu einlesen.
+        /// </summary>
+        public void RecalibrateCursor() => _mage.RecalibrateCursor();
         public void LiveUpdateActionRpg  (bool  v) { _movement.ActionRpgMode = v; }
 
         // ── Log ──────────────────────────────────────────────────────────────────
@@ -142,18 +155,16 @@ namespace RagnaController.Core
 
         public void LoadProfile(Profile profile)
         {
-            _movement.Sensitivity     = profile.MouseSensitivity;
-            _movement.Deadzone        = profile.Deadzone;
-            _movement.Curve           = profile.MovementCurve;
-            _movement.ActionRpgMode   = profile.ActionRpgMode;
-            _movement.LeashRadius     = (int)(profile.ActionSpeed * 36f);
-            _movement.CoastFrames     = profile.MovementCoastFrames;
-            _movement.CurveMode       = profile.MovementCurveMode == 0
-                                        ? MovementCurveMode.Classic
-                                        : MovementCurveMode.DualZone;
-            _movement.ClickCooldownMs    = profile.ClickCooldownMs;
-            _movement.ClickCooldownMaxMs = profile.ClickCooldownMaxMs;
-            _movement.ForwardBias        = profile.MovementForwardBias;
+            _movement.Sensitivity  = profile.MouseSensitivity;
+            _movement.Deadzone     = profile.Deadzone;
+            _movement.Curve        = profile.MovementCurve;
+            _movement.ActionRpgMode = profile.ActionRpgMode;
+            _movement.LeashRadius  = (int)(profile.ActionSpeed * 36f);
+            _movement.CoastFrames  = profile.MovementCoastFrames;
+            _movement.ClickCooldownMs = profile.ClickCooldownMs;
+            _movement.CurveMode    = profile.MovementCurveMode == 0
+                                     ? MovementCurveMode.Classic
+                                     : MovementCurveMode.DualZone;
 
             // Cursor engine settings from profile
             _cursor.MaxSpeed = profile.CursorMaxSpeed;
@@ -266,7 +277,12 @@ namespace RagnaController.Core
             // ── Left stick → movement ──────────────────────────────────────────────
             float stickX = NormalizeAxis(pad.LeftThumbX);
             float stickY = NormalizeAxis(pad.LeftThumbY);
-            _movement.Update(stickX, stickY);
+            // Suppress walking only while Mage ground-aim is held (L2 held in Mage mode)
+            bool suppressMovement = _mage.IsActive && _mage.GroundAimHeld;
+            if (!suppressMovement)
+                _movement.Update(stickX, stickY);
+            else
+                _movement.Reset(); // stop character immediately when aiming
 
             // ── X button = hold Alt (show ground items) ───────────────────────────
             bool xNow = pad.Buttons.HasFlag(GamepadButtonFlags.X);
@@ -337,7 +353,9 @@ namespace RagnaController.Core
             else if (_mage.IsActive || (_mage.MageEnabled && l3Now && !l3Was))
             {
                 if (l3Now && !l3Was) _mage.ToggleMageMode();
-                _mage.Update(camX, camY, r3Now, r2, l2, TickMs);
+                // Update returns true if left stick should be suppressed (ground-aim active)
+                // Movement is handled above via _mage.GroundAimHeld
+                _mage.Update(camX, camY, r3Now, r2, l2, l1, r1, TickMs);
             }
             else if (_kite.IsActive || (_kite.KiteEnabled && l3Now && !l3Was))
             {
@@ -418,13 +436,15 @@ namespace RagnaController.Core
                 ControllerName = _ctrl.ControllerName,
                 ControllerType = _ctrl.ControllerType,
                 PrecisionMode  = _precisionMode,
-                MobSweepActive = _sweepWasActive,
+                MobSweepActive     = _sweepWasActive,
+                GroundSpellPending = _mage.IsActive && _mage.GroundSpellPending,
+                GroundAimHeld      = _mage.IsActive && _mage.GroundAimHeld,
                 LayerText = l1 ? "L1+" : r1 ? "R1+" : l2 ? "L2+" : r2 ? "R2+" : "BASE",
                 CombatState = _autoTarget.State,
-                StateLabel = _support.IsActive ? _support.PhaseLabel
-                           : _mage.IsActive    ? _mage.PhaseLabel
-                           : _kite.IsActive    ? _kite.PhaseLabel
-                           : _sweepWasActive   ? "MOB SWEEP"
+                StateLabel = _support.IsActive     ? _support.PhaseLabel
+                           : _mage.IsActive       ? _mage.PhaseLabel
+                           : _kite.IsActive       ? _kite.PhaseLabel
+                           : _sweepWasActive      ? "MOB SWEEP"
                            : _autoTarget.StateLabel
             });
 
@@ -460,6 +480,16 @@ namespace RagnaController.Core
                 bool now = current.HasFlag(flag);
                 if (now || _prevButtons.HasFlag(flag))
                     _combat.ProcessButton(flag.ToString(), now, TickMs);
+
+                // After a skill fires via L2/R2 + face button in Mage mode:
+                // start cursor-detection window to auto-detect ground spells.
+                if (_mage.IsActive && now && (_curL2 || _curR2))
+                {
+                    var fb = flag & (GamepadButtonFlags.A | GamepadButtonFlags.B
+                                   | GamepadButtonFlags.X | GamepadButtonFlags.Y);
+                    if (fb != 0)
+                        _mage.NotifySkillFired();
+                }
             }
         }
 
@@ -490,7 +520,9 @@ namespace RagnaController.Core
         public string             StateLabel     { get; init; } = "IDLE";
         public string             LayerText      { get; init; } = "Base";
         public bool               PrecisionMode   { get; init; } = false;
-        public bool               MobSweepActive  { get; init; } = false;
+        public bool               MobSweepActive    { get; init; } = false;
+    public bool GroundSpellPending { get; init; } = false;
+    public bool GroundAimHeld      { get; init; } = false;
         public CombatState        CombatState     { get; init; }
     }
 }

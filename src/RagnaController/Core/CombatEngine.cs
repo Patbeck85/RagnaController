@@ -15,6 +15,12 @@ namespace RagnaController.Core
 
         /// <summary>Fired when an action is triggered (for vibration feedback).</summary>
         public event Action<ButtonAction>? ActionFired;
+
+        /// <summary>
+        /// Fired when a ground-spell action is triggered (IsGroundSpell=true).
+        /// HybridEngine listens and tells MageEngine to enter ground-aim mode.
+        /// </summary>
+        public event Action? GroundSpellFired;
         private bool _layerR1Active;
         private bool _layerL2Active;
         private bool _layerR2Active;
@@ -87,6 +93,11 @@ namespace RagnaController.Core
         private void FireAction(ButtonAction action)
         {
             ActionFired?.Invoke(action);
+
+            // Notify MageEngine if this is a ground-target spell
+            if (action.IsGroundSpell)
+                GroundSpellFired?.Invoke();
+
             switch (action.Type)
             {
                 case ActionType.Key:
@@ -233,5 +244,12 @@ namespace RagnaController.Core
         public VirtualKey ModifierKey { get; set; } = VirtualKey.None;
         public string? MacroFilePath { get; set; }
         public bool IsMacro => !string.IsNullOrEmpty(MacroFilePath);
+
+        /// <summary>
+        /// Mark this action as a Ground-Target spell (Storm Gust, Meteor Storm, etc.).
+        /// When fired in Mage mode, the engine automatically enters ground-aim:
+        /// movement stops, right stick controls cursor, release trigger = place spell.
+        /// </summary>
+        public bool IsGroundSpell { get; set; } = false;
     }
 }

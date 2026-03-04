@@ -44,20 +44,28 @@ namespace RagnaController.Core
 
         public static void LeftClick()
         {
-            LeftButtonDown();
-            Thread.Sleep(8); // Minimum hold for RO to register (1 tick at 125fps)
-            LeftButtonUp();
+            // Fire Down+Up on a background thread so the engine tick is never blocked.
+            // 8ms hold = minimum RO requires to register a click (1 tick at 125fps).
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                LeftButtonDown();
+                System.Threading.Thread.Sleep(8);
+                LeftButtonUp();
+            });
         }
 
         public static void RightClick()
         {
-            var inputs = new INPUT[1];
-            inputs[0].type = 0;
-            inputs[0].Data.mi.dwFlags = 0x0008; // RightDown
-            SendInput(1, inputs, InputSize);
-            Thread.Sleep(8); // Minimum hold for RO to register
-            inputs[0].Data.mi.dwFlags = 0x0010; // RightUp
-            SendInput(1, inputs, InputSize);
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var inputs = new INPUT[1];
+                inputs[0].type = 0;
+                inputs[0].Data.mi.dwFlags = 0x0008; // RightDown
+                SendInput(1, inputs, InputSize);
+                System.Threading.Thread.Sleep(8);
+                inputs[0].Data.mi.dwFlags = 0x0010; // RightUp
+                SendInput(1, inputs, InputSize);
+            });
         }
 
         public static void LeftButtonDown()
@@ -89,26 +97,39 @@ namespace RagnaController.Core
 
         public static void DoubleClick()
         {
+            // Both clicks already fire on background threads via LeftClick()
             LeftClick();
-            System.Threading.Thread.Sleep(16);
-            LeftClick();
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                await System.Threading.Tasks.Task.Delay(24); // wait for first click + gap
+                LeftClick();
+            });
         }
 
         public static void TapKeyWithModifier(VirtualKey modifier, VirtualKey key)
         {
-            KeyDown(modifier);
-            System.Threading.Thread.Sleep(8);
-            TapKey(key);
-            System.Threading.Thread.Sleep(8);
-            KeyUp(modifier);
+            if (modifier == VirtualKey.None) { TapKey(key); return; }
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                KeyDown(modifier);
+                System.Threading.Thread.Sleep(8);
+                KeyDown(key);
+                System.Threading.Thread.Sleep(8);
+                KeyUp(key);
+                System.Threading.Thread.Sleep(4);
+                KeyUp(modifier);
+            });
         }
 
         public static void TapKey(VirtualKey key)
         {
             if (key == VirtualKey.None) return;
-            KeyDown(key);
-            Thread.Sleep(8);  // Minimum key hold for RO to register
-            KeyUp(key);
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                KeyDown(key);
+                System.Threading.Thread.Sleep(8);
+                KeyUp(key);
+            });
         }
 
         public static void KeyDown(VirtualKey key)
