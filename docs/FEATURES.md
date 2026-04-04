@@ -1,35 +1,35 @@
 # RagnaController — Feature Reference
 
-**Tick rate:** 125 Hz (8 ms) · **Profiles:** 39 · **Controller brands:** 8 · **Source:** 29 .cs · 10 .xaml
+**Tick rate:** 125 Hz (8 ms) · **Profiles:** 39 · **Controller brands:** 8
 
 ---
 
 ## Startup & UI Shell
 
 ### Splash Screen (`SplashWindow`)
-- Shows for 3 seconds on every launch
-- Fade-in (0.5 s), animated Neon progress bar (cyan → purple with glow)
-- Logo pulse animation, status text cycles: *Initializing → Loading profiles → Starting engines → Connecting controller → Ready*
-- Fades out (0.3 s) as MainWindow opens simultaneously
-- Wrapped in try/catch — startup errors shown as MessageBox, app exits cleanly
+- Shows for 3 seconds on every launch.
+- Fade-in (0.5 s), animated Neon progress bar (cyan → purple with glow).
+- Logo pulse animation, status text cycles: *Initializing → Loading profiles → Starting engines → Connecting controller → Ready*.
+- Fades out (0.3 s) as MainWindow opens simultaneously.
+- Wrapped in try/catch — startup errors shown as MessageBox, app exits cleanly.
 
 ### System Tray (`InitTrayIcon`)
-- `NotifyIcon` with embedded `Assets/icon.ico`
-- Double-click → restores and activates MainWindow
-- Right-click menu: **Show RagnaController** / **Exit**
-- Disposed on `Window_Closing` — no handle leaks
+- `NotifyIcon` with embedded `Assets/icon.ico`.
+- Double-click → restores and activates MainWindow.
+- Right-click menu: **Show RagnaController** / **Exit**.
+- Disposed on `Window_Closing` — no handle leaks.
 
 ### Global Hotkeys
-- Registered via Win32 `RegisterHotKey` on `SourceInitialized`
-- Unregistered via `UnregisterHotKey` on `Window_Closing`
-- **Ctrl+1–4** → switch to profile slots 1–4
-- Works when window is minimized to tray
+- Registered via Win32 `RegisterHotKey` on `SourceInitialized`.
+- Unregistered via `UnregisterHotKey` on `Window_Closing`.
+- **Ctrl+1–4** → switch to profile slots 1–4.
+- Works even when the window is minimized to the system tray.
 
 ### Mini Mode (`MiniModeWindow`)
-- 280×120 px always-on-top overlay
-- Shows: current profile name, engine state, active/inactive indicator, combat phase
-- Draggable; click X → returns to full MainWindow
-- Live-updated every engine tick via `UpdateState()`
+- 280×120 px always-on-top overlay.
+- Shows: current profile name, engine state, active/inactive indicator, combat phase.
+- Draggable; click X → securely returns to full MainWindow.
+- Live-updated every UI tick via `UpdateState()`.
 
 ---
 
@@ -93,7 +93,7 @@ Configured per-button in **Button Remap** window.
 | **Rhythmic** | Interval oscillates via sine wave — organic, unpredictable timing |
 | **Adaptive** | Instant first press, follow-ups slow to ~attack animation length |
 
-Minimum interval: 30 ms. Turbo runs inside the 125 Hz tick loop — non-blocking.
+Minimum interval: 30 ms. Turbo runs safely inside the 125 Hz tick loop.
 
 ---
 
@@ -181,10 +181,6 @@ Each defines: engine settings, cursor/movement tuning, F-key recommendations, cl
 **Storage:**  
 - Built-ins: code-defined, never written to disk unless modified  
 - User saves: `%AppData%\RagnaController\Profiles\`  
-- `ProfileManager.SaveProfile()` — writes/overwrites JSON  
-- `ProfileManager.Save()` — same, used for new wizard profiles  
-- `ProfileManager.Import()` / `Export()` — copy to/from arbitrary path  
-- `ProfileManager.Delete()` — removes file from disk  
 
 ---
 
@@ -243,15 +239,3 @@ Persisted to `%AppData%\RagnaController\settings.json`.
 | LogLevel | Info | Minimum log level written to file |
 | LastProfileName | (last used) | Auto-selected on next launch |
 | WindowPosition | (last position) | Restored on next launch |
-
----
-
-## Performance Targets
-
-| Metric | Target | Typical |
-|---|---|---|
-| Tick avg | < 2 ms | ~0.8 ms |
-| Tick max | < 8 ms | ~3 ms |
-| Input latency | < 10 ms | ~5 ms |
-| RAM | < 120 MB | ~70 MB |
-| CPU idle | < 1 % | ~0.3 % |

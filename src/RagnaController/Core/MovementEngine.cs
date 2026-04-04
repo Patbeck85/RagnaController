@@ -3,181 +3,88 @@ using System.Runtime.InteropServices;
 
 namespace RagnaController.Core
 {
-    /// <summary>
-    /// Movement engine for Ragnarok Online — click-to-move via left stick.
-    ///
-    /// Basis: Original v1.0.x (SetCursorPos + SendInput + Thread.Sleep(8)) — bewiesene RO-Kompatibilität.
-    /// v1.1.0 Ergänzungen:
-    ///   + DualZone-Kurve (sanfte Feinzone + Snap-Vollgas bei 90%+)
-    ///   + Coast-Cancel   (Richtungswechsel >120° bricht Nachgleiten sofort ab)
-    ///   + CoastFrames Division-by-Zero Guard
-    /// </summary>
     public class MovementEngine
     {
-        [DllImport("user32.dll")]
-        private static extern int GetSystemMetrics(int nIndex);
-        private const int SM_CXSCREEN = 0;
-        private const int SM_CYSCREEN = 1;
+        [DllImport("user32.dll")] private static extern int GetSystemMetrics(int n);
+        private int _cx, _cy, _lx = -1, _ly = -1, _cf = 0;
+        private float _cdx, _cdy, _cm, _lootAngle;
+        private DateTime _lc = DateTime.MinValue;
+        private bool _mv;
 
-        private int _centerX;
-        private int _centerY;
-
-        // ── Einstellungen ─────────────────────────────────────────────────────
-        public float Sensitivity   { get; set; } = 1.0f;
-        public float Deadzone      { get; set; } = 0.20f;
-        public float Curve         { get; set; } = 1.5f;
-        public int   LeashRadius   { get; set; } = 180;
-        public bool  ActionRpgMode { get; set; } = true;
-
-        /// <summary>Click-Cooldown bei voller Auslenkung (ms). Default 80 = Original.</summary>
+        public float Sensitivity { get; set; } = 1.0f;
+        public float Deadzone { get; set; } = 0.20f;
+        public float Curve { get; set; } = 1.5f;
+        public int LeashRadius { get; set; } = 180;
+        public bool ActionRpgMode { get; set; } = true;
         public int ClickCooldownMs { get; set; } = 80;
+        public int CoastFrames { get; set; } = 3;
 
-        /// <summary>Frames Nachgleiten nach Stick-Loslassen. Default 3 = Original.</summary>
-        public int CoastFrames     { get; set; } = 3;
+        public MovementEngine() => Refresh();
+        public void Refresh() { _cx = GetSystemMetrics(0) >> 1; _cy = GetSystemMetrics(1) >> 1; }
+        public void Reset() { _mv = false; _cf = 0; _lx = -1; _ly = -1; _lootAngle = 0; }
+        public void CenterCursor() { Refresh(); InputSimulator.MoveMouseAbsolute(_cx, _cy); }
 
-        /// <summary>
-        /// Kurven-Modus.
-        /// Classic  = einfache Potenz-Kurve (Original-Verhalten).
-        /// DualZone = sanfte Feinzone + Snap-Vollgas bei hoher Auslenkung.
-        /// </summary>
-        public MovementCurveMode CurveMode    { get; set; } = MovementCurveMode.DualZone;
-        public float DualZoneSnapAt           { get; set; } = 0.85f;
-        public float DualZoneTransition       { get; set; } = 0.50f;
-
-        // ── Interner Status ───────────────────────────────────────────────────
-        private bool     _isMoving       = false;
-        private DateTime _lastClickTime  = DateTime.MinValue;
-        private int      _lastTargetX    = -1;
-        private int      _lastTargetY    = -1;
-
-        private int   _coastFramesLeft = 0;
-        private float _coastDirX       = 0f;
-        private float _coastDirY       = 0f;
-        private float _coastMagnitude  = 0f;
-
-        public MovementEngine() => RefreshScreenCenter();
-
-        public void RefreshScreenCenter()
+        public void Update(float x, float y)
         {
-            _centerX = GetSystemMetrics(SM_CXSCREEN) / 2;
-            _centerY = GetSystemMetrics(SM_CYSCREEN) / 2;
-        }
-
-        public void Reset()
-        {
-            _isMoving        = false;
-            _coastFramesLeft = 0;
-            _lastTargetX     = -1;
-            _lastTargetY     = -1;
-        }
-
-        public void Update(float stickX, float stickY)
-        {
-            float magnitude = MathF.Sqrt(stickX * stickX + stickY * stickY);
-
-            if (magnitude > Deadzone)
+            float sq = x * x + y * y;
+            if (sq > Deadzone * Deadzone)
             {
-                float dirX = stickX / magnitude;
-                float dirY = stickY / magnitude;
-
-                // Coast-Cancel: Richtungswechsel >120° → sofort stoppen statt schlittern
-                if (_coastFramesLeft > 0)
-                {
-                    float dot = dirX * _coastDirX + dirY * _coastDirY;
-                    if (dot < -0.50f)
-                        _coastFramesLeft = 0;
+                float m = MathF.Sqrt(sq);
+                // FIX: Verhindere Division by Zero
+                if (m < 0.001f) m = 0.001f; 
+                
+                float dx = x / m, dy = y / m;
+                if (_cf > 0 && (dx * _cdx + dy * _cdy) < -0.5f) _cf = 0;
+                
+                _cf = CoastFrames; _cdx = dx; _cdy = dy;
+                
+                // FIX: Clamp den normierten Wert zwischen 0 und 1, um Infinity zu vermeiden
+                float nm = Math.Clamp((m - Deadzone) / (1.0f - Deadzone), 0f, 1f);
+                float cv = MathF.Pow(nm, Curve); 
+                _cm = cv;
+                
+                Move(dx, dy, cv);
+                
+                // Verhindere zu schnelle Klicks
+                float clickDiv = Math.Max(0.3f, cv);
+                if (ActionRpgMode && (DateTime.UtcNow - _lc).TotalMilliseconds >= (ClickCooldownMs / clickDiv))
+                { 
+                    InputSimulator.LeftClick(); 
+                    _lc = DateTime.UtcNow; 
                 }
-
-                _coastFramesLeft = CoastFrames;
-                _coastDirX       = dirX;
-                _coastDirY       = dirY;
-
-                float normalizedMag = (magnitude - Deadzone) / (1f - Deadzone);
-                float curvedMag     = ApplyCurve(normalizedMag);
-                _coastMagnitude     = curvedMag;
-
-                MoveToTarget(dirX, dirY, curvedMag);
-
-                // Adaptive cooldown — Original-Formel, bewährt in RO
-                int adaptiveCooldown = (int)(ClickCooldownMs / MathF.Max(0.3f, curvedMag));
-
-                if (ActionRpgMode)
-                {
-                    var now = DateTime.UtcNow;
-                    if ((now - _lastClickTime).TotalMilliseconds >= adaptiveCooldown)
-                    {
-                        InputSimulator.LeftClick();
-                        _lastClickTime = now;
-                    }
-                }
-
-                _isMoving = true;
+                _mv = true;
             }
-            else if (_coastFramesLeft > 0)
+            else if (_cf > 0)
             {
-                _coastFramesLeft--;
-
-                // Guard: CoastFrames=0 → Division-by-Zero verhindern
-                float coastFactor = CoastFrames > 0 ? _coastFramesLeft / (float)CoastFrames : 0f;
-                float coastCurved = _coastMagnitude * coastFactor;
-
-                MoveToTarget(_coastDirX, _coastDirY, coastCurved);
+                float t = (float)_cf / CoastFrames;
+                Move(_cdx, _cdy, _cm * (t * t));
+                _cf--;
             }
-            else
-            {
-                if (_isMoving)
-                {
-                    _isMoving    = false;
-                    _lastTargetX = -1;
-                    _lastTargetY = -1;
-                }
-            }
+            else if (_mv) Reset();
         }
 
-        /// <summary>
-        /// Cursor-Position setzen — exakt wie Original.
-        /// LeashRadius * curvedMag = Cursor bewegt sich mit dem Stick-Ausschlag.
-        /// </summary>
-        private void MoveToTarget(float dirX, float dirY, float curvedMag)
+        public void PerformLootVacuum(int ms)
         {
-            int targetX = _centerX + (int)(dirX *  LeashRadius * curvedMag * Sensitivity);
-            int targetY = _centerY - (int)(dirY *  LeashRadius * curvedMag * Sensitivity);
-
-            if (targetX != _lastTargetX || targetY != _lastTargetY)
-            {
-                InputSimulator.MoveMouseAbsolute(targetX, targetY);
-                _lastTargetX = targetX;
-                _lastTargetY = targetY;
-            }
+            _lootAngle += 0.005f * ms; 
+            float r = 70 + MathF.Sin(_lootAngle * 0.2f) * 25;
+            InputSimulator.MoveMouseAbsolute(_cx + (int)(MathF.Cos(_lootAngle) * r), _cy + (int)(MathF.Sin(_lootAngle) * r));
+            InputSimulator.LeftClick();
         }
 
-        /// <summary>Kurve anwenden. normalizedMag = 0..1 nach Deadzone.</summary>
-        private float ApplyCurve(float normalizedMag)
+        private void Move(float dx, float dy, float cv)
         {
-            if (CurveMode == MovementCurveMode.Classic)
-                return MathF.Pow(normalizedMag, Curve);
-
-            // DualZone Zone 3: sofort Vollgas
-            if (normalizedMag >= DualZoneSnapAt)
-                return 1.0f;
-
-            // DualZone Zone 2: lineare Rampe
-            if (normalizedMag >= DualZoneTransition)
-            {
-                float t = (normalizedMag - DualZoneTransition) / (DualZoneSnapAt - DualZoneTransition);
-                return 0.55f + t * 0.45f;
+            // FIX: NaN/Infinity check
+            if (float.IsNaN(dx) || float.IsNaN(dy) || float.IsInfinity(dx) || float.IsInfinity(dy)) return;
+            
+            float s = LeashRadius * cv * Sensitivity;
+            int tx = _cx + (int)(dx * s), ty = _cy - (int)(dy * s);
+            
+            if (tx != _lx || ty != _ly) 
+            { 
+                InputSimulator.MoveMouseAbsolute(tx, ty); 
+                _lx = tx; 
+                _ly = ty; 
             }
-
-            // DualZone Zone 1: quadratische Feinsteuerung
-            if (DualZoneTransition <= 0f) return 0f;
-            float tLow = normalizedMag / DualZoneTransition;
-            return tLow * tLow * 0.55f;
         }
-    }
-
-    public enum MovementCurveMode
-    {
-        Classic,   // Potenz-Kurve — Original-Verhalten
-        DualZone   // Fein + Rampe + Snap — besser für Mobben
     }
 }

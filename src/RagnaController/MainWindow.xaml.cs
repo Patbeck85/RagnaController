@@ -1,17 +1,12 @@
 using System;
-using System.Reflection;
-using WinForms = System.Windows.Forms;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Shapes;
 using RagnaController.Core;
-using System.Runtime.InteropServices;
-using System.Windows.Interop;
 using RagnaController.Models;
 using RagnaController.Profiles;
 
@@ -19,448 +14,422 @@ namespace RagnaController
 {
     public partial class MainWindow : Window
     {
-        private readonly HybridEngine   _engine         = new();
-        private readonly ProfileManager _profileManager = new();
-        private readonly Settings       _settings       = Settings.Load();
-        private readonly StringBuilder  _logBuffer      = new();
-
+        private readonly HybridEngine   _engine   = new();
+        private readonly ProfileManager _manager  = new();
+        private readonly Settings       _settings = Settings.Load();
+        private bool _isRenewal = true, _isMiniMode = false, _actionRpgOn = true, _suppressSliders = true;
+        private bool _isDirty = false;
+        private ControllerPreview? _livePreview;
+        private string? _lastHighlight;
+        private readonly List<string> _logBuffer = new();
         private MiniModeWindow? _miniWindow;
-        private bool   _isMiniMode      = false;
-        private bool   _actionRpgOn     = true;
-        private string _activeTab       = "Base";
-        private bool   _isDirty         = false;   // unsaved changes
-        private WinForms.NotifyIcon? _trayIcon;
-        private bool   _suppressSliders = false;   // suppress recursive events while loading profile
-
-        // ── Global Hotkeys (Ctrl+1-4 = profile slots 1-4) ─────────────────────
-        [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-        [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-        private const uint MOD_CONTROL   = 0x0002;
-        private const int  HOTKEY_ID_BASE = 9000; // uses IDs 9001–9004 (profiles), 9010 (Ctrl+F minimode)
 
         public MainWindow()
         {
             InitializeComponent();
-            // Version aus Assembly lesen — niemals hardcoden
-            var _ver = Assembly.GetExecutingAssembly().GetName().Version;
-            AppVersionLabel.Text = _ver != null ? $"v{_ver.Major}.{_ver.Minor}.{_ver.Build}" : "v?";
-            SourceInitialized += (_, _) => RegisterGlobalHotkeys();
-            SubscribeEngineEvents();
-            PopulateProfiles();
-            SelectLastProfile();
-            SetActiveTab("Base");
-            ApplySettings(_settings);
-            InitTrayIcon();
-            RestoreWindowPosition();
-            if (_settings.AutoStart)      _engine.Start();
-            if (_settings.StartInMiniMode) SwitchToMiniMode();
-            _ = CheckForUpdatesAsync();
-        }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // ENGINE EVENTS
-        // ══════════════════════════════════════════════════════════════════════
+            if (!IsRunningAsAdmin())
+                AdminWarningBanner.Visibility = System.Windows.Visibility.Visible;
 
-        private void SubscribeEngineEvents()
-        {
-            _engine.StatusChanged += s => Dispatcher.Invoke(() =>
+            _engine.StatusChanged += (s) => Dispatcher.Invoke(() =>
             {
-                bool running    = s == EngineStatus.Running;
-                bool noCtrl     = s == EngineStatus.NoController;
-
-                var color = running ? Color.FromRgb(57, 255, 20)
-                          : noCtrl  ? Color.FromRgb(255, 170, 0)
-                          :           Color.FromRgb(255, 68, 68);
-
-                StatusDot.Fill              = new SolidColorBrush(color);
-                StatusText.Text             = running ? "RUNNING" : noCtrl ? "NO CONTROLLER" : "STOPPED";
-                StatusText.Foreground       = new SolidColorBrush(color);
-                EnginePulse.Fill            = new SolidColorBrush(running ? Color.FromRgb(57, 255, 20) : Color.FromRgb(85, 94, 106));
-                EngineStateLabel.Text       = StatusText.Text;
-                EngineStateLabel.Foreground = new SolidColorBrush(running ? Color.FromRgb(57, 255, 20) : Color.FromRgb(85, 94, 106));
-
-                BtnStart.IsEnabled = !running;
-                BtnStop.IsEnabled  = running;
-            });
-
-            _engine.SnapshotUpdated += snap => Dispatcher.Invoke(() =>
-            {
-                // Stick-Dots
-                Canvas.SetLeft(LeftStickDot,  20 + snap.LeftX  * 18);
-                Canvas.SetTop (LeftStickDot,  20 - snap.LeftY  * 18);
-                Canvas.SetLeft(RightStickDot, 20 + snap.RightX * 18);
-                Canvas.SetTop (RightStickDot, 20 - snap.RightY * 18);
-
-                // Controller-Badge
-                bool connected = snap.ControllerType is not ("" or "Unknown");
-
-                // Per-brand accent colours
-                (Color fg, Color bg) ctrlTheme = snap.ControllerType switch
+                if (StatusText != null)
                 {
-                    "PS4" or "PS5"  => (Color.FromRgb(  0, 112, 212), Color.FromRgb( 0,  18,  40)), // PlayStation blue
-                    "Switch"        => (Color.FromRgb(230,   0,  18), Color.FromRgb(40,   0,   0)), // Nintendo red
-                    "8BitDo"        => (Color.FromRgb(255, 105,   0), Color.FromRgb(40,  20,   0)), // 8BitDo orange
-                    "Logitech"      => (Color.FromRgb(  0, 164, 228), Color.FromRgb( 0,  20,  35)), // Logitech cyan
-                    "Razer"         => (Color.FromRgb(  0, 255,  68), Color.FromRgb( 0,  30,  10)), // Razer green
-                    "Thrustmaster"  => (Color.FromRgb(255, 215,   0), Color.FromRgb(30,  25,   0)), // Thrustmaster gold
-                    "Xbox"          => (Color.FromRgb( 16, 124,  16), Color.FromRgb( 5,  25,   5)), // Xbox green
-                    _               => (Color.FromRgb( 85,  94, 106), Color.FromRgb(20,  13,  13))  // disconnected grey
-                };
-
-                Color ctrlColor = connected ? ctrlTheme.fg : Color.FromRgb(85, 94, 106);
-                Color ctrlBg    = connected ? ctrlTheme.bg : Color.FromRgb(20, 13, 13);
-
-                string ctrlLabel = connected ? snap.ControllerType.ToUpper() : "NO CONTROLLER";
-
-                ControllerDot.Fill                  = new SolidColorBrush(ctrlColor);
-                ControllerStatusText.Text           = ctrlLabel;
-                ControllerStatusText.Foreground     = new SolidColorBrush(ctrlColor);
-                ControllerBadge.Background          = new SolidColorBrush(ctrlBg);
-                ControllerBadge.BorderBrush         = new SolidColorBrush(ctrlColor);
-                ControllerBadge.BorderThickness     = connected ? new System.Windows.Thickness(1) : new System.Windows.Thickness(0);
-
-                // Layer-Badge
-                string layer = snap.LayerText ?? "BASE";
-                LayerText.Text = layer + " LAYER";
-                StatusLayer.Text = layer;
-                var layerColor = layer switch {
-                    "L1+" or "R1+" => Color.FromRgb(255, 140, 0),
-                    "L2+" or "R2+" => Color.FromRgb(255, 68, 68),
-                    _              => Color.FromRgb(0, 255, 255)
-                };
-                LayerText.Foreground   = new SolidColorBrush(layerColor);
-                LayerBadge.BorderBrush = new SolidColorBrush(layerColor);
-                LayerBadge.Background  = new SolidColorBrush(Color.FromArgb(30, layerColor.R, layerColor.G, layerColor.B));
-                StatusLayer.Foreground = new SolidColorBrush(layerColor);
-
-                // Precision
-                bool precision = snap.PrecisionMode;
-                PrecisionBadge.Visibility = precision ? Visibility.Visible : Visibility.Collapsed;
-                PrecisionLabel.Text       = precision ? "ON" : "OFF";
-                PrecisionLabel.Foreground = new SolidColorBrush(precision ? Color.FromRgb(255, 170, 0) : Color.FromRgb(85, 94, 106));
-                PrecisionIndicator.Background = new SolidColorBrush(precision ? Color.FromRgb(30, 25, 0) : Color.FromRgb(20, 18, 0));
-                StatusPrecision.Text      = precision ? "⊕ PRECISION ON" : "○ PRECISION OFF";
-                StatusPrecision.Foreground = new SolidColorBrush(precision ? Color.FromRgb(255, 170, 0) : Color.FromRgb(85, 94, 106));
-
-                // Mob-Sweep Status
-                bool sweep = snap.MobSweepActive;
-                StatusSweep.Text      = sweep ? "⚔ SWEEP ON" : "◌ SWEEP OFF";
-                StatusSweep.Foreground = new SolidColorBrush(sweep
-                    ? Color.FromRgb(212, 168, 50)   // Gold wenn aktiv
-                    : Color.FromRgb(85, 94, 106));  // Grau wenn inaktiv
-
-                // Update MiniMode live if open
-                if (_isMiniMode && _miniWindow != null)
+                    StatusText.Text       = s == EngineStatus.Running ? "RUNNING"
+                                         : s == EngineStatus.NoController ? "NO CONTROLLER"
+                                         : "PAUSED";
+                    StatusText.Foreground = s == EngineStatus.Running ? Brushes.Lime : Brushes.OrangeRed;
+                }
+                if (AutoStatusText != null)
                 {
-                    string profileName = ProfileCombo.SelectedItem is Profile pr ? pr.Name : "–";
-                    _miniWindow.UpdateState(profileName, snap.StateLabel,
-                        _engine.IsRunning, snap.CombatState);
+                    AutoStatusText.Text = s == EngineStatus.Running ? _engine.ControllerName + " — aktiv"
+                                        : s == EngineStatus.Stopped  ? "Pausiert"
+                                        : "Warte auf Controller…";
+                }
+                if (StatusDot != null)
+                {
+                    StatusDot.Fill = s == EngineStatus.Running
+                        ? Brushes.Lime
+                        : s == EngineStatus.Stopped ? Brushes.Orange
+                        : new SolidColorBrush(Color.FromRgb(85, 94, 106));
+                }
+                if (BtnPause != null)
+                {
+                    BtnPause.IsEnabled = s == EngineStatus.Running || s == EngineStatus.Stopped;
+                    BtnPause.Content   = _engine.IsPaused ? "▶ Resume" : "⏸ Pause";
+                    BtnPause.Foreground = _engine.IsPaused ? Brushes.Lime : new SolidColorBrush(Color.FromRgb(139, 148, 158));
                 }
             });
 
-            // Log-Nachrichten → LOG-Tab
-            _engine.BatteryChanged     += level => Dispatcher.Invoke(() => UpdateBatteryDisplay(level));
-            _engine.ProfileQuickSwitch += delta  => Dispatcher.Invoke(() => QuickSwitchProfile(delta));
+            _engine.SnapshotUpdated += (snap) => Dispatcher.Invoke(() =>
+            {
+                if (_isMiniMode && _miniWindow != null)
+                    _miniWindow.UpdateState(
+                        ProfileCombo?.SelectedItem is Profile p ? p.Name : "-",
+                        snap.StateLabel, _engine.IsRunning, snap.CombatState);
+
+                if (StatusLayer  != null)  StatusLayer.Text  = snap.LayerText;
+                if (StatusPanic  != null) { StatusPanic.Text  = snap.PanicActive  ? "🆘 PANIC"    : "◌ PANIC OFF";  StatusPanic.Foreground  = snap.PanicActive  ? Brushes.Red    : Brushes.Gray; }
+                if (StatusVacuum != null) { StatusVacuum.Text = snap.VacuumActive ? "🌀 VACUUM"   : "◌ VACUUM OFF"; StatusVacuum.Foreground = snap.VacuumActive ? Brushes.Cyan   : Brushes.Gray; }
+                if (StatusCombo  != null) { StatusCombo.Text  = snap.ComboActive  ? $"⚡ {snap.ComboLabel}" : "◌ COMBO OFF"; StatusCombo.Foreground = snap.ComboActive ? Brushes.Yellow : Brushes.Gray; }
+                if (TickLatencyText != null) TickLatencyText.Text = snap.TickMs.ToString("F1") + "ms";
+
+                if (AutoStatusText != null && _engine.FocusLockEnabled && _engine.IsFocusLocked)
+                {
+                    AutoStatusText.Text = "⛔ FOCUS LOCK — switch to RO";
+                    if (StatusDot != null) StatusDot.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0x99, 0x00));
+                }
+
+                if (LeftStickDot  != null) { Canvas.SetLeft(LeftStickDot,  20 + snap.LeftX  * 20); Canvas.SetTop(LeftStickDot,  20 - snap.LeftY  * 20); }
+                if (RightStickDot != null) { Canvas.SetLeft(RightStickDot, 20 + snap.RightX * 20); Canvas.SetTop(RightStickDot, 20 - snap.RightY * 20); }
+
+                if (_livePreview != null)
+                {
+                    string h = snap.L1 ? "LeftShoulder" : snap.R1 ? "RightShoulder"
+                             : snap.L2 ? "LeftTrigger"  : snap.R2 ? "RightTrigger" : "";
+                    if (h != _lastHighlight)
+                    {
+                        if (!string.IsNullOrEmpty(h)) _livePreview.HighlightButton(h);
+                        else _livePreview.HighlightButton(""); 
+                        _lastHighlight = h;
+                    }
+                }
+            });
+
+            _engine.ProfileQuickSwitch += delta => Dispatcher.Invoke(() =>
+            {
+                if (_manager.Profiles.Count == 0) return;
+                int idx  = _manager.Profiles.IndexOf(ProfileCombo.SelectedItem as Profile ?? _manager.Profiles[0]);
+                int next = (idx + delta + _manager.Profiles.Count) % _manager.Profiles.Count;
+                ProfileCombo.SelectedItem = _manager.Profiles[next];
+            });
+
             _engine.LogMessage += msg => Dispatcher.Invoke(() =>
             {
-                _logBuffer.AppendLine(msg);
-
-                // Limit buffer to ~500 lines
-                if (_logBuffer.Length > 20000)
-                {
-                    var lines = _logBuffer.ToString().Split('\n');
-                    _logBuffer.Clear();
-                    foreach (var l in lines.TakeLast(400))
-                        _logBuffer.AppendLine(l);
-                }
-
-                LogTextBlock.Text = _logBuffer.ToString();
-
-                // Auto-scroll
-                if (_activeTab == "Log")
-                    LogScrollViewer.ScrollToEnd();
+                if (LogTextBlockTab == null) return;
+                _logBuffer.Add(msg);
+                if (_logBuffer.Count > 500) _logBuffer.RemoveRange(0, 100);
+                ApplyLogFilter();
+                LogScrollViewer?.ScrollToEnd();
             });
+
+            _engine.VoiceStatusChanged += msg => Dispatcher.Invoke(() =>
+            {
+                if (VoiceStatusText != null)
+                {
+                    VoiceStatusText.Text       = msg;
+                    VoiceStatusText.Foreground = msg.StartsWith("🎤")
+                        ? Brushes.Lime : new SolidColorBrush(Color.FromRgb(85, 94, 106));
+                }
+            });
+
+            _engine.BatteryChanged += level => Dispatcher.Invoke(() =>
+            {
+                if (BatteryFill == null || BatteryLevelText == null) return;
+                
+                // FIX: Added "Wired" and "Medium" states to match XInput properly
+                var (fillWidth, fillColor, label) = level switch
+                {
+                    "Wired" => (24.0, Color.FromRgb( 57, 255,  20), "WIRED"),
+                    "Full"  => (22.0, Color.FromRgb( 57, 255,  20), "Full"),
+                    "Medium"=> (12.0, Color.FromRgb(255, 184,   0), "Mid"),
+                    "Low"   => ( 5.0, Color.FromRgb(255,  58,  82), "Low!"),
+                    "Empty" => ( 2.0, Color.FromRgb(255,  58,  82), "Empty"),
+                    _       => ( 0.0, Color.FromRgb( 85,  94, 106), "–")
+                };
+                BatteryFill.Width      = fillWidth;
+                BatteryFill.Background = new SolidColorBrush(fillColor);
+                BatteryLevelText.Text       = label;
+                BatteryLevelText.Foreground = new SolidColorBrush(fillColor);
+            });
+
+            _engine.ControllerConnected += name => Dispatcher.Invoke(() =>
+            {
+                if (ControllerNameText != null)
+                {
+                    ControllerNameText.Text       = name;
+                    ControllerNameText.Foreground = Brushes.Lime;
+                    ControllerNameText.Tag        = true;
+                }
+            });
+
+            _engine.ControllerDisconnected += () => Dispatcher.Invoke(() =>
+            {
+                if (ControllerNameText != null)
+                {
+                    ControllerNameText.Text       = "No Controller";
+                    ControllerNameText.Foreground = new SolidColorBrush(Color.FromRgb(85, 94, 106));
+                    ControllerNameText.Tag        = false;
+                }
+                if (BatteryFill     != null) BatteryFill.Width = 0;
+                if (BatteryLevelText != null) BatteryLevelText.Text = "–";
+            });
+
+            _engine.RestoreMainWindowRequested += () => Dispatcher.Invoke(() =>
+            {
+                if (_isMiniMode) SwitchFromMiniMode();
+            });
+
+            this.Loaded += (s, e) =>
+            {
+                _suppressSliders = true;
+                ProfileCombo.ItemsSource = _manager.Profiles;
+                var lastP = _manager.Profiles.FirstOrDefault(p => p.Name == _settings.LastProfileName);
+                ProfileCombo.SelectedItem = lastP ?? _manager.Profiles.FirstOrDefault();
+                if (GameModeCombo != null)
+                {
+                    foreach (ComboBoxItem item in GameModeCombo.Items)
+                        if (item.Tag?.ToString() == _settings.LastGameMode) { GameModeCombo.SelectedItem = item; break; }
+                }
+                if (PreviewContainer != null)
+                {
+                    PreviewContainer.Children.Clear();
+                    var livePreview = new ControllerPreview();
+                    PreviewContainer.Children.Add(livePreview);
+                    _livePreview = livePreview;
+                }
+                _engine.SetSoundEnabled(_settings.SoundEnabled);
+                _engine.SetRumbleEnabled(_settings.RumbleEnabled);
+                _engine.FocusLockEnabled = _settings.FocusLockEnabled;
+                _engine.FocusLockProcess = _settings.FocusLockProcess;
+                _suppressSliders = false;
+                UpdateToggleVisual();
+                UpdateEngine();
+
+                if (_settings.StartInMiniMode) SwitchToMiniMode();
+
+                _ = Core.UpdateChecker.CheckAndNotifyAsync(this);
+            };
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // PROFIL
-        // ══════════════════════════════════════════════════════════════════════
-
-        private void PopulateProfiles()
+        // --------------------------------------------------------
+        //  Navigation / Window
+        // --------------------------------------------------------
+        public void SwitchFromMiniMode()
         {
-            ProfileCombo.ItemsSource       = _profileManager.Profiles;
-            ProfileCombo.DisplayMemberPath = "Name";
+            if (!_isMiniMode) return;
+            _isMiniMode = false;
+            
+            if (_miniWindow != null)
+            {
+                _miniWindow.Close();
+                _miniWindow = null;
+            }
+            
+            Show(); 
+            WindowState = WindowState.Normal; 
+            Activate();
+            Focus();
         }
 
-        private void SelectLastProfile()
+        private void SwitchToMiniMode()
         {
-            ProfileCombo.SelectedItem =
-                _profileManager.Profiles.FirstOrDefault(p => p.Name == _settings.LastProfileName)
-                ?? _profileManager.Profiles.FirstOrDefault();
+            if (_isMiniMode) return;
+            _isMiniMode = true;
+            _miniWindow = new MiniModeWindow { Owner = this };
+            _miniWindow.Show();
+            Hide();
         }
 
-        private void ProfileCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void Window_MouseLeftButtonDown(object s, MouseButtonEventArgs e)
         {
-            if (ProfileCombo.SelectedItem is not Profile p) return;
+            if (e.LeftButton == MouseButtonState.Pressed) DragMove();
+        }
 
-            // Populate sliders without setting dirty flag
-            _suppressSliders = true;
-            SensitivitySlider.Value = p.CursorMaxSpeed;
-            DeadzoneSlider.Value    = Math.Max(DeadzoneSlider.Minimum, Math.Min(DeadzoneSlider.Maximum, p.Deadzone));
-            CurveSlider.Value       = Math.Max(CurveSlider.Minimum,    Math.Min(CurveSlider.Maximum,    p.CursorCurve));
-            ActionSpeedSlider.Value = Math.Max(ActionSpeedSlider.Minimum, Math.Min(ActionSpeedSlider.Maximum, p.ActionSpeed));
-            _suppressSliders = false;
+        private void BtnMinimize_Click(object s, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+        private void BtnClose_Click(object s, RoutedEventArgs e)    => Close();
 
-            // Toggle
-            _actionRpgOn = p.ActionRpgMode;
-            UpdateToggleVisual();
-
-            _engine.LoadProfile(p);
-            BuildMappingTables(p);
-            UpdateInfoTab(p);
-
-            // Statusbar + Settings
-            StatusProfile.Text     = p.Name;
-            StatusCursorSpeed.Text = $"{p.CursorMaxSpeed:F0} px/s";
-            _settings.LastProfileName = p.Name;
+        private void Window_Closing(object s, System.ComponentModel.CancelEventArgs e)
+        {
+            _engine.Shutdown();
+            if (ProfileCombo?.SelectedItem is Profile p)     _settings.LastProfileName = p.Name;
+            if (GameModeCombo?.SelectedItem is ComboBoxItem ci) _settings.LastGameMode = ci.Tag?.ToString() ?? "Ren";
             _settings.Save();
-
-            SetDirty(false);
         }
 
-        private void BtnSave_Click(object sender, RoutedEventArgs e)
+        // --------------------------------------------------------
+        // Profile / Engine
+        // --------------------------------------------------------
+        private void GameModeCombo_SelectionChanged(object s, SelectionChangedEventArgs e)
         {
-            if (ProfileCombo.SelectedItem is not Profile p) return;
-
-            // Write current slider values back to profile
-            p.CursorMaxSpeed  = (float)SensitivitySlider.Value;
-            p.Deadzone        = (float)DeadzoneSlider.Value;
-            p.CursorCurve     = (float)CurveSlider.Value;
-            p.ActionSpeed     = (float)ActionSpeedSlider.Value;
-            p.ActionRpgMode   = _actionRpgOn;
-
-            _profileManager.SaveProfile(p);
-            SetDirty(false);
-
-            // Brief visual feedback
-            BtnSave.Content    = "✓  SAVED";
-            BtnSave.Background = new SolidColorBrush(Color.FromRgb(10, 40, 10));
-            var timer = new System.Windows.Threading.DispatcherTimer
+            if (!_suppressSliders && GameModeCombo?.SelectedItem is ComboBoxItem i)
             {
-                Interval = TimeSpan.FromSeconds(1.5)
-            };
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                BtnSave.Content    = "💾  SAVE";
-                BtnSave.Background = new SolidColorBrush(Color.FromRgb(26, 42, 10));
-                if (!_isDirty) BtnSave.Visibility = Visibility.Collapsed;
-            };
-            timer.Start();
-        }
-
-        private void SetDirty(bool dirty)
-        {
-            _isDirty            = dirty;
-            BtnSave.Visibility  = dirty ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        // ══════════════════════════════════════════════════════════════════════
-        // TABS
-        // ══════════════════════════════════════════════════════════════════════
-
-        private void SetActiveTab(string tab)
-        {
-            _activeTab = tab;
-
-            PanelBase.Visibility = PanelL1.Visibility = PanelR1.Visibility =
-                PanelL2.Visibility = PanelR2.Visibility =
-                PanelLog.Visibility = PanelInfo.Visibility = Visibility.Collapsed;
-
-            switch (tab)
-            {
-                case "Base": PanelBase.Visibility  = Visibility.Visible; break;
-                case "L1":   PanelL1.Visibility    = Visibility.Visible; break;
-                case "R1":   PanelR1.Visibility    = Visibility.Visible; break;
-                case "L2":   PanelL2.Visibility    = Visibility.Visible; break;
-                case "R2":   PanelR2.Visibility    = Visibility.Visible; break;
-                case "Log":
-                    PanelLog.Visibility = Visibility.Visible;
-                    LogScrollViewer.ScrollToEnd();
-                    break;
-                case "Info": PanelInfo.Visibility  = Visibility.Visible; break;
-            }
-
-            var tabs = new Dictionary<string, Button>
-            {
-                ["Base"] = TabBtnBase, ["L1"] = TabBtnL1, ["R1"] = TabBtnR1,
-                ["L2"]   = TabBtnL2,  ["R2"] = TabBtnR2,
-                ["Log"]  = TabBtnLog, ["Info"] = TabBtnInfo
-            };
-
-            foreach (var (key, btn) in tabs)
-            {
-                bool active = key == tab;
-                btn.Style = active
-                    ? (Style)Resources["TabButtonActive"]
-                    : (Style)Resources["TabButton"];
-
-                if (!active && key == "Info")
-                    btn.Foreground = new SolidColorBrush(Color.FromRgb(57, 130, 20));
+                _isRenewal = i.Tag?.ToString() == "Ren";
+                _engine.ApplyGameMode(_isRenewal);
+                UpdateEngine();
             }
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // MAPPING TABELLEN
-        // ══════════════════════════════════════════════════════════════════════
+        private void ProfileCombo_SelectionChanged(object s, SelectionChangedEventArgs e)
+        {
+            if (!_suppressSliders && ProfileCombo?.SelectedItem is Profile p) UpdateEngine();
+        }
+
+        private void UpdateEngine()
+        {
+            if (ProfileCombo?.SelectedItem is Profile p)
+            {
+                _suppressSliders = true;
+                if (SensitivitySlider  != null) SensitivitySlider.Value  = p.CursorMaxSpeed;
+                if (DeadzoneSlider     != null) DeadzoneSlider.Value     = p.Deadzone;
+                if (CurveSlider        != null) CurveSlider.Value        = p.MovementCurve;
+                if (ActionSpeedSlider  != null) ActionSpeedSlider.Value  = p.ActionSpeed;
+                UpdateDeadzoneRing((float)p.Deadzone);
+                _suppressSliders = false;
+                _engine.LoadProfile(p);
+                if (ClassInfoText != null) ClassInfoText.Text = p.Class.ToUpper() + " (" + (_isRenewal ? "RE" : "PRE") + ")";
+                if (StatusProfile != null) StatusProfile.Text = p.Name;
+                if (ClassBadgeText != null)
+                {
+                    string icon = p.Class?.ToLower() switch
+                    {
+                        "mage" or "wizard" or "sage" or "high wizard" or "professor" => "✨",
+                        "archer" or "hunter" or "sniper" or "bard" or "dancer" or "clown" or "gypsy" => "🏹",
+                        "thief" or "assassin" or "rogue" or "assassin cross" or "stalker" => "🗡",
+                        "acolyte" or "priest" or "monk" or "high priest" or "champion" => "🛡",
+                        "merchant" or "blacksmith" or "alchemist" or "whitesmith" or "creator" => "⚒",
+                        "gunslinger" => "🔫",
+                        "ninja" => "🌙",
+                        _ => "⚔"
+                    };
+                    ClassBadgeText.Text = $"{icon} {p.Class?.ToUpper() ?? "–"}";
+                }
+                if (InfoClassName != null) InfoClassName.Text    = p.Name;
+                if (InfoClassType != null) InfoClassType.Text    = p.Class?.ToUpper() ?? "–";
+                if (InfoTips      != null) InfoTips.Text         = p.ClassTips;
+                if (InfoSkillList != null) InfoSkillList.ItemsSource = p.SkillRecommendations;
+                BuildMappingTables(p);
+            }
+        }
 
         private void BuildMappingTables(Profile p)
         {
-            MappingsBase.Children.Clear();
-            MappingsL1.Children.Clear();
-            MappingsR1.Children.Clear();
-            MappingsL2.Children.Clear();
-            MappingsR2.Children.Clear();
-
-            AddCategoryHeader(MappingsBase, "STANDARD BUTTONS");
-            AddCategoryHeader(MappingsL1, "L1 + BUTTON  →  SKILL");
-            AddCategoryHeader(MappingsR1, "R1 + BUTTON  →  SKILL");
-            AddCategoryHeader(MappingsL2, "L2 + BUTTON  →  SKILL");
-            AddCategoryHeader(MappingsR2, "R2 + BUTTON  →  SKILL");
-
+            if (MappingsBase == null) return;
+            MappingsBase.Children.Clear(); MappingsL1.Children.Clear(); MappingsR1.Children.Clear();
+            MappingsL2.Children.Clear();   MappingsR2.Children.Clear();
             foreach (var kv in p.ButtonMappings.OrderBy(k => k.Key))
             {
-                if      (kv.Key.StartsWith("L1+")) MappingsL1.Children.Add(MakeMappingRow(kv.Key, kv.Value.Label));
-                else if (kv.Key.StartsWith("R1+")) MappingsR1.Children.Add(MakeMappingRow(kv.Key, kv.Value.Label));
-                else if (kv.Key.StartsWith("L2+")) MappingsL2.Children.Add(MakeMappingRow(kv.Key, kv.Value.Label));
-                else if (kv.Key.StartsWith("R2+")) MappingsR2.Children.Add(MakeMappingRow(kv.Key, kv.Value.Label));
-                else                               MappingsBase.Children.Add(MakeMappingRow(kv.Key, kv.Value.Label));
+                var row = MakeMappingRow(kv.Key, kv.Value);
+                if      (kv.Key.StartsWith("L1+")) MappingsL1.Children.Add(row);
+                else if (kv.Key.StartsWith("R1+")) MappingsR1.Children.Add(row);
+                else if (kv.Key.StartsWith("L2+")) MappingsL2.Children.Add(row);
+                else if (kv.Key.StartsWith("R2+")) MappingsR2.Children.Add(row);
+                else                               MappingsBase.Children.Add(row);
             }
-
-            foreach (var panel in new[] { MappingsL1, MappingsR1, MappingsL2, MappingsR2 })
-                if (panel.Children.Count == 1) // nur Header
-                    panel.Children.Add(MakeEmptyHint("No mappings for this layer."));
         }
 
-        private static void AddCategoryHeader(StackPanel panel, string title)
+        private UIElement MakeMappingRow(string k, ButtonAction a)
         {
-            var sp = new StackPanel { Margin = new Thickness(0, 4, 0, 6) };
-            sp.Children.Add(new TextBlock
-            {
-                Text = title, Foreground = new SolidColorBrush(Color.FromRgb(85, 94, 106)),
-                FontSize = 9, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 4)
-            });
-            sp.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(Color.FromRgb(33, 38, 45)) });
-            panel.Children.Add(sp);
-        }
+            var g = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            g.Children.Add(new TextBlock { Text = k, Foreground = Brushes.Cyan, FontSize = 11 });
 
-        private static UIElement MakeMappingRow(string key, string label)
-        {
-            var grid = new Grid { Margin = new Thickness(0, 3, 0, 3) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.Children.Add(new TextBlock
-            {
-                Text = key, Foreground = new SolidColorBrush(Color.FromRgb(0, 255, 255)),
-                FontFamily = new FontFamily("Consolas"), FontSize = 12
-            });
-            var lbl = new TextBlock
-            {
-                Text = label, Foreground = new SolidColorBrush(Color.FromRgb(230, 237, 243)),
-                FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis
-            };
+            string label = a.TurboEnabled ? $"{a.Label} ⚡" : a.Label;
+            var fg  = a.TurboEnabled
+                ? new SolidColorBrush(Color.FromRgb(229, 184, 66)) 
+                : Brushes.White;
+            var lbl = new TextBlock { Text = label, Foreground = fg, FontSize = 11 };
+            if (a.TurboEnabled)
+                lbl.ToolTip = $"Turbo aktiv — {1000.0 / Math.Max(a.TurboIntervalMs, 1):F1}/sec ({a.TurboIntervalMs}ms)";
+
             Grid.SetColumn(lbl, 1);
-            grid.Children.Add(lbl);
-            return grid;
+            g.Children.Add(lbl);
+            return g;
         }
 
-        private static UIElement MakeEmptyHint(string text) =>
-            new TextBlock
-            {
-                Text = text, Foreground = new SolidColorBrush(Color.FromRgb(85, 94, 106)),
-                FontSize = 11, FontStyle = FontStyles.Italic, Margin = new Thickness(0, 8, 0, 0)
-            };
-
-        // ══════════════════════════════════════════════════════════════════════
-        // INFO-TAB
-        // ══════════════════════════════════════════════════════════════════════
-
-        private void UpdateInfoTab(Profile p)
+        // --------------------------------------------------------
+        //  Toolbar Buttons
+        // --------------------------------------------------------
+        private void BtnPause_Click(object s, RoutedEventArgs e)
         {
-            InfoClassName.Text   = p.Name.ToUpper();
-            InfoClassType.Text   = p.Class.ToUpper();
-            InfoCursorSpeed.Text = $"{p.CursorMaxSpeed:F0} px/s";
-            InfoActionSpeed.Text = $"{p.ActionSpeed:F1}";
-            InfoCoastFrames.Text = $"{p.MovementCoastFrames} Frames";
-
-            InfoSkillList.ItemsSource = p.SkillRecommendations.Count > 0
-                ? p.SkillRecommendations
-                : new List<string> { "No recommendations – assign F-keys freely in game." };
-
-            InfoTips.Text = string.IsNullOrEmpty(p.ClassTips)
-                ? "Set up your F-keys in game to match this class."
-                : p.ClassTips.Replace("\\n", Environment.NewLine);
+            if (_engine.IsPaused) _engine.Resume();
+            else                  _engine.Pause();
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // SLIDER → ENGINE LIVE UPDATE
-        // ══════════════════════════════════════════════════════════════════════
+        private void ResetBtn_MouseEnter(object s, MouseEventArgs e)
+        { if (s is System.Windows.Controls.Button b) b.Foreground = Brushes.White; }
+        private void ResetBtn_MouseLeave(object s, MouseEventArgs e)
+        { if (s is System.Windows.Controls.Button b) b.Foreground = new SolidColorBrush(Color.FromRgb(0x3A, 0x45, 0x60)); }
 
-        private void SensitivitySlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e)
+        private void BtnRemap_Click(object s, RoutedEventArgs e)
         {
-            if (SensitivityValue == null) return;
-            SensitivityValue.Text  = $"{e.NewValue:F0}";
-            StatusCursorSpeed.Text = $"{e.NewValue:F0} px/s";
-            if (!_suppressSliders)
+            if (ProfileCombo.SelectedItem is Profile p)
             {
-                _engine.LiveUpdateCursorSpeed((float)e.NewValue);
-                SetDirty(true);
+                new ButtonRemappingWindow(p).ShowDialog();
+                _manager.SaveProfile(p);
+                ClearDirty();
+                BuildMappingTables(p);
             }
         }
 
-        private void DeadzoneSlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e)
+        private void BtnMacro_Click(object s, RoutedEventArgs e) => new MacroRecorderWindow().ShowDialog();
+
+        private void BtnRadial_Click(object s, RoutedEventArgs e)
         {
-            if (DeadzoneValue == null) return;
-            DeadzoneValue.Text = $"{e.NewValue:F2}";
-            if (!_suppressSliders)
+            if (ProfileCombo.SelectedItem is Profile p)
             {
-                _engine.LiveUpdateDeadzone((float)e.NewValue);
-                SetDirty(true);
+                var win = new RadialSetupWindow(p.RadialMenuItems) { Owner = this };
+                if (win.ShowDialog() == true) _manager.SaveProfile(p);
             }
         }
 
-        private void CurveSlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e)
+        private void BtnCombo_Click(object s, RoutedEventArgs e)
         {
-            if (CurveValue == null) return;
-            CurveValue.Text = $"{e.NewValue:F1}";
-            if (!_suppressSliders)
+            if (ProfileCombo.SelectedItem is Profile p)
             {
-                _engine.LiveUpdateCurve((float)e.NewValue);
-                SetDirty(true);
+                var win = new ComboEditorWindow(p) { Owner = this };
+                if (win.ShowDialog() == true)
+                {
+                    _manager.SaveProfile(p);
+                    _engine.LoadProfile(p);
+                }
             }
         }
 
-        private void ActionSpeedSlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e)
+        private void BtnLibrary_Click(object s, RoutedEventArgs e)
         {
-            if (ActionSpeedValue == null) return;
-            ActionSpeedValue.Text = $"{e.NewValue:F1}";
-            if (!_suppressSliders)
+            var win = new ProfileLibraryWindow(_manager) { Owner = this };
+            if (win.ShowDialog() == true && win.SelectedProfile != null)
             {
-                _engine.LiveUpdateActionSpeed((float)e.NewValue);
-                SetDirty(true);
+                var existing = _manager.Profiles.FirstOrDefault(p => p.Name == win.SelectedProfile.Name);
+                if (existing != null) ProfileCombo.SelectedItem = existing;
             }
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // ACTION RPG TOGGLE
-        // ══════════════════════════════════════════════════════════════════════
+        private void BtnWizard_Click(object s, RoutedEventArgs e)
+        {
+            var w = new ProfileWizardWindow();
+            if (w.ShowDialog() == true && w.CreatedProfile != null)
+            {
+                _manager.AddAndSave(w.CreatedProfile);
+                ProfileCombo.ItemsSource = null;
+                ProfileCombo.ItemsSource = _manager.Profiles;
+                ProfileCombo.SelectedItem = _manager.Profiles.LastOrDefault();
+            }
+        }
 
-        private void MoveModeToggle_Click(object sender, MouseButtonEventArgs e)
+        private void BtnSettings_Click(object s, RoutedEventArgs e)
+        {
+            new SettingsWindow(_settings, saved =>
+            {
+                _engine.SetSoundEnabled(saved.SoundEnabled);
+                _engine.SetRumbleEnabled(saved.RumbleEnabled);
+                _engine.FocusLockEnabled = saved.FocusLockEnabled;
+                _engine.FocusLockProcess = saved.FocusLockProcess;
+            }).ShowDialog();
+        }
+
+        private void BtnMini_Click(object s, RoutedEventArgs e) => SwitchToMiniMode();
+
+        // --------------------------------------------------------
+        //  Toggles + Sliders
+        // --------------------------------------------------------
+        private void MoveModeToggle_Click(object s, MouseButtonEventArgs e)
         {
             _actionRpgOn = !_actionRpgOn;
             _engine.LiveUpdateActionRpg(_actionRpgOn);
             UpdateToggleVisual();
-            SetDirty(true);
         }
 
         private void UpdateToggleVisual()
@@ -468,369 +437,178 @@ namespace RagnaController
             if (ToggleBg == null || ToggleThumb == null) return;
             if (_actionRpgOn)
             {
-                ToggleBg.Background   = new SolidColorBrush(Color.FromRgb(0, 80, 80));
-                ToggleBg.BorderBrush  = new SolidColorBrush(Color.FromRgb(0, 255, 255));
-                ToggleThumb.Fill      = new SolidColorBrush(Color.FromRgb(0, 255, 255));
+                ToggleBg.Background             = new SolidColorBrush(Color.FromRgb(0, 80, 80));
                 ToggleThumb.HorizontalAlignment = HorizontalAlignment.Right;
-                ToggleThumb.Margin    = new Thickness(0, 0, 3, 0);
+                ToggleThumb.Margin              = new Thickness(0, 0, 3, 0);
+                ToggleThumb.Fill                = Brushes.Cyan;
             }
             else
             {
-                ToggleBg.Background   = new SolidColorBrush(Color.FromRgb(33, 38, 45));
-                ToggleBg.BorderBrush  = new SolidColorBrush(Color.FromRgb(48, 54, 61));
-                ToggleThumb.Fill      = new SolidColorBrush(Color.FromRgb(85, 94, 106));
+                ToggleBg.Background             = new SolidColorBrush(Color.FromRgb(33, 38, 45));
                 ToggleThumb.HorizontalAlignment = HorizontalAlignment.Left;
-                ToggleThumb.Margin    = new Thickness(3, 0, 0, 0);
+                ToggleThumb.Margin              = new Thickness(3, 0, 0, 0);
+                ToggleThumb.Fill                = new SolidColorBrush(Color.FromRgb(85, 94, 106));
             }
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // BUTTONS
-        // ══════════════════════════════════════════════════════════════════════
-
-        private void BtnStart_Click  (object s, RoutedEventArgs e) => _engine.Start();
-        private void BtnStop_Click   (object s, RoutedEventArgs e) => _engine.Stop();
-        private void BtnMini_Click   (object s, RoutedEventArgs e) => SwitchToMiniMode();
-
-        private void BtnLibrary_Click(object s, RoutedEventArgs e)
+        private void DeadzoneSlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e)
         {
-            var win = new ProfileLibraryWindow(_profileManager) { Owner = this };
-            win.ShowDialog();
+            if (DeadzoneValue != null) DeadzoneValue.Text = e.NewValue.ToString("F2");
+            UpdateDeadzoneRing((float)e.NewValue);
+            if (!_suppressSliders) { _engine.LiveUpdateDeadzone((float)e.NewValue); MarkDirty(); }
+        }
 
-            // Always refresh combo – user may have added/deleted profiles in the Library
-            ProfileCombo.ItemsSource = null;
-            ProfileCombo.ItemsSource = _profileManager.Profiles;
+        private void UpdateDeadzoneRing(float deadzone)
+        {
+            double diameter = Math.Max(4, deadzone * 50.0);
+            if (LeftDeadzoneRing  != null) { LeftDeadzoneRing.Width  = diameter; LeftDeadzoneRing.Height  = diameter; }
+            if (RightDeadzoneRing != null) { RightDeadzoneRing.Width = diameter; RightDeadzoneRing.Height = diameter; }
+        }
+        private void CurveSlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e)       { if (CurveValue       != null) CurveValue.Text       = e.NewValue.ToString("F2"); if (!_suppressSliders) { _engine.LiveUpdateCurve((float)e.NewValue);          MarkDirty(); } }
+        private void ActionSpeedSlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e) { if (ActionSpeedValue != null) ActionSpeedValue.Text = e.NewValue.ToString("F2"); if (!_suppressSliders) { _engine.LiveUpdateActionSpeed((float)e.NewValue);    MarkDirty(); } }
+        private void SensitivitySlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e) { if (SensitivityValue != null) SensitivityValue.Text = e.NewValue.ToString("F0"); if (!_suppressSliders) { _engine.LiveUpdateCursorSpeed((float)e.NewValue);   MarkDirty(); } }
 
-            // If a profile was explicitly selected ("Load"), switch to it
-            if (win.SelectedProfile != null)
+        private void DeadzoneLabel_DblClick(object s, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount != 2) return;
+            if (ProfileCombo?.SelectedItem is Profile p)
             {
-                var match = _profileManager.Profiles.FirstOrDefault(p => p.Name == win.SelectedProfile.Name);
-                if (match != null) ProfileCombo.SelectedItem = match;
+                _suppressSliders = true;
+                DeadzoneSlider.Value = p.Deadzone;
+                _suppressSliders = false;
+                _engine.LiveUpdateDeadzone((float)p.Deadzone);
+                UpdateDeadzoneRing((float)p.Deadzone);
             }
         }
+        private void CurveLabel_DblClick(object s, MouseButtonEventArgs e)       { if (e.ClickCount != 2) return; if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; CurveSlider.Value        = p.MovementCurve;   _suppressSliders = false; _engine.LiveUpdateCurve((float)p.MovementCurve); } }
+        private void ActionSpeedLabel_DblClick(object s, MouseButtonEventArgs e) { if (e.ClickCount != 2) return; if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; ActionSpeedSlider.Value  = p.ActionSpeed;     _suppressSliders = false; _engine.LiveUpdateActionSpeed((float)p.ActionSpeed); } }
+        private void SensitivityLabel_DblClick(object s, MouseButtonEventArgs e) { if (e.ClickCount != 2) return; if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; SensitivitySlider.Value  = p.CursorMaxSpeed;  _suppressSliders = false; _engine.LiveUpdateCursorSpeed((float)p.CursorMaxSpeed); } }
 
-        private void BtnRemap_Click(object s, RoutedEventArgs e)
+        private void DeadzoneReset_Click(object s, RoutedEventArgs e)     { if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; DeadzoneSlider.Value     = p.Deadzone;        _suppressSliders = false; _engine.LiveUpdateDeadzone((float)p.Deadzone);         UpdateDeadzoneRing((float)p.Deadzone); } }
+        private void CurveReset_Click(object s, RoutedEventArgs e)        { if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; CurveSlider.Value        = p.MovementCurve;   _suppressSliders = false; _engine.LiveUpdateCurve((float)p.MovementCurve); } }
+        private void ActionSpeedReset_Click(object s, RoutedEventArgs e)  { if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; ActionSpeedSlider.Value  = p.ActionSpeed;     _suppressSliders = false; _engine.LiveUpdateActionSpeed((float)p.ActionSpeed); } }
+        private void SensitivityReset_Click(object s, RoutedEventArgs e)  { if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; SensitivitySlider.Value  = p.CursorMaxSpeed;  _suppressSliders = false; _engine.LiveUpdateCursorSpeed((float)p.CursorMaxSpeed); } }
+
+        private void MarkDirty()
         {
-            if (ProfileCombo.SelectedItem is not Profile p) return;
-            var win = new ButtonRemappingWindow(p) { Owner = this };
-            if (win.ShowDialog() == true)
-            {
-                // Reloaded so changes are visible
-                BuildMappingTables(p);
-                _engine.LoadProfile(p);
-                SetDirty(true);
-            }
+            if (_isDirty) return;
+            _isDirty = true;
+            if (ProfileCombo?.SelectedItem is Profile p && ClassBadgeText != null)
+                ClassBadgeText.Text = ClassBadgeText.Text.TrimEnd('*', ' ') + " *";
         }
 
-        private void BtnMacro_Click(object s, RoutedEventArgs e)
+        private void ClearDirty()
         {
-            var win = new MacroRecorderWindow() { Owner = this };
-            win.ShowDialog();
+            _isDirty = false;
+            if (ClassBadgeText != null)
+                ClassBadgeText.Text = ClassBadgeText.Text.TrimEnd('*', ' ');
         }
 
-        private void BtnWizard_Click(object s, RoutedEventArgs e)
-        {
-            var win = new ProfileWizardWindow() { Owner = this };
-            if (win.ShowDialog() == true && win.CreatedProfile != null)
-            {
-                _profileManager.Profiles.Add(win.CreatedProfile);
-                _profileManager.Save(win.CreatedProfile);
-                ProfileCombo.ItemsSource = null;
-                ProfileCombo.ItemsSource = _profileManager.Profiles;
-                ProfileCombo.SelectedItem = win.CreatedProfile;
-            }
-        }
-
-        private void TabBase_Click (object s, RoutedEventArgs e) => SetActiveTab("Base");
-        private void TabL1_Click   (object s, RoutedEventArgs e) => SetActiveTab("L1");
-        private void TabR1_Click   (object s, RoutedEventArgs e) => SetActiveTab("R1");
-        private void TabL2_Click   (object s, RoutedEventArgs e) => SetActiveTab("L2");
-        private void TabR2_Click   (object s, RoutedEventArgs e) => SetActiveTab("R2");
-        private void TabLog_Click  (object s, RoutedEventArgs e) => SetActiveTab("Log");
-        private void TabInfo_Click (object s, RoutedEventArgs e) => SetActiveTab("Info");
-
-        // ══════════════════════════════════════════════════════════════════════
-        // MINI MODE
-        // ══════════════════════════════════════════════════════════════════════
-
-        public void SwitchToMiniMode()
-        {
-            if (_isMiniMode) return;
-            _isMiniMode = true;
-            _miniWindow = new MiniModeWindow { Owner = this };
-            _miniWindow.Show();
-            this.Hide();
-        }
-
-        public void SwitchFromMiniMode()
-        {
-            if (!_isMiniMode) return;
-            _isMiniMode = false;
-            this.Show();
-            _miniWindow?.Close();
-            _miniWindow = null;
-        }
-
-        // ══════════════════════════════════════════════════════════════════════
-        // FENSTER
-        // ══════════════════════════════════════════════════════════════════════
-
-
-
-
-        private void InitTrayIcon()
+        private static bool IsRunningAsAdmin()
         {
             try
             {
-                _trayIcon = new WinForms.NotifyIcon
-                {
-                    Text    = "RagnaController",
-                    Visible = true
-                };
-
-                // Icon aus eingebetteter WPF-Resource laden (pack URI) —
-                // funktioniert sowohl im Debug- als auch im publish-Ordner,
-                // da icon.ico als <Resource> in die Assembly kompiliert wird.
-                try
-                {
-                    var sri = Application.GetResourceStream(
-                        new Uri("pack://application:,,,/Assets/icon.ico"));
-                    if (sri != null)
-                        _trayIcon.Icon = new System.Drawing.Icon(sri.Stream);
-                    else
-                        _trayIcon.Icon = System.Drawing.SystemIcons.Application;
-                }
-                catch
-                {
-                    _trayIcon.Icon = System.Drawing.SystemIcons.Application;
-                }
-
-                // Double-click tray icon → restore window
-                _trayIcon.DoubleClick += (_, _) =>
-                {
-                    Show();
-                    WindowState = WindowState.Normal;
-                    Activate();
-                };
-
-                // Right-click context menu
-                var menu = new WinForms.ContextMenuStrip();
-                menu.Items.Add("Show RagnaController", null, (_, _) => { Show(); WindowState = WindowState.Normal; Activate(); });
-                menu.Items.Add("-");
-                menu.Items.Add("Exit",                 null, (_, _) => Close());
-                _trayIcon.ContextMenuStrip = menu;
+                var id  = System.Security.Principal.WindowsIdentity.GetCurrent();
+                var pri = new System.Security.Principal.WindowsPrincipal(id);
+                return pri.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
             }
-            catch (Exception ex)
+            catch { return false; }
+        }
+
+        private void BtnRestartAsAdmin_Click(object s, RoutedEventArgs e)
+        {
+            try
             {
-                System.Diagnostics.Debug.WriteLine($"[MainWindow] Tray icon error: {ex.Message}");
-            }
-        }
-
-        private void QuickSwitchProfile(int delta)
-        {
-            int count = ProfileCombo.Items.Count;
-            if (count == 0) return;
-            int next = (ProfileCombo.SelectedIndex + delta + count) % count;
-            ProfileCombo.SelectedIndex = next;
-            if (ProfileCombo.SelectedItem is Profile p)
-            {
-                _engine.LoadProfile(p);
-                _engine.Log($"[QuickSwitch] → {p.Name}", LogLevel.Info, "Profile");
-            }
-        }
-
-        // ── Global Hotkey registration ─────────────────────────────────────────
-        private void RegisterGlobalHotkeys()
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            HwndSource.FromHwnd(hwnd)?.AddHook(HotkeyWndProc);
-            for (int i = 1; i <= 4; i++)
-                RegisterHotKey(hwnd, HOTKEY_ID_BASE + i, MOD_CONTROL, (uint)('0' + i));
-            // Ctrl+F = Toggle MiniMode / FullMode
-            RegisterHotKey(hwnd, HOTKEY_ID_BASE + 10, MOD_CONTROL, (uint)'F');
-        }
-
-        private void UnregisterGlobalHotkeys()
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            for (int i = 1; i <= 4; i++)
-                UnregisterHotKey(hwnd, HOTKEY_ID_BASE + i);
-            UnregisterHotKey(hwnd, HOTKEY_ID_BASE + 10);
-        }
-
-        private IntPtr HotkeyWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            const int WM_HOTKEY = 0x0312;
-            if (msg == WM_HOTKEY)
-            {
-                int slot = (int)wParam - HOTKEY_ID_BASE; // 1–4 or 10
-                // Ctrl+F = Toggle MiniMode
-                if (slot == 10)
+                var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (exe == null) return;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        if (_isMiniMode) SwitchFromMiniMode();
-                        else SwitchToMiniMode();
-                    });
-                    handled = true;
-                }
-                if (slot >= 1 && slot <= 4)
-                {
-                    var profiles = _profileManager.Profiles;
-                    int idx = slot - 1;
-                    if (idx < profiles.Count)
-                    {
-                        Dispatcher.Invoke(() =>
-                        {
-                            ProfileCombo.SelectedIndex = idx;
-                            _engine.LoadProfile(profiles[idx]);
-                        });
-                        _engine.Log($"[Hotkey] Ctrl+{slot} → {profiles[idx].Name}", LogLevel.Info, "Hotkey");
-                    }
-                    handled = true;
-                }
+                    FileName = exe, UseShellExecute = true, Verb = "runas"
+                });
+                Application.Current.Shutdown();
             }
-            return IntPtr.Zero;
+            catch { }
         }
 
-        private void Window_Closing(object s, System.ComponentModel.CancelEventArgs e)
+        // --------------------------------------------------------
+        //  Tabs
+        // --------------------------------------------------------
+        private void TabBase_Click(object s, RoutedEventArgs e) => SetTab("Base");
+        private void TabL1_Click(object s, RoutedEventArgs e)   => SetTab("L1");
+        private void TabR1_Click(object s, RoutedEventArgs e)   => SetTab("R1");
+        private void TabL2_Click(object s, RoutedEventArgs e)   => SetTab("L2");
+        private void TabR2_Click(object s, RoutedEventArgs e)   => SetTab("R2");
+        private void TabInfo_Click(object s, RoutedEventArgs e) => SetTab("Info");
+        private void TabLog_Click(object s, RoutedEventArgs e)  => SetTab("Log");
+
+        private void SetTab(string t)
         {
-            if (_isDirty)
-            {
-                var result = MessageBox.Show(
-                    "There are unsaved changes to the current profile.\n\nSave now?",
-                    "RagnaController", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (result == MessageBoxResult.Yes)
-                    BtnSave_Click(s, new RoutedEventArgs());
-            }
-            // Save window position
-            _settings.WindowPosition = $"{Left},{Top}";
-            _settings.Save();
-            // Finalize log file — wrap in try/catch so a disk error never blocks Stop()
-            try { _engine.Logger.ExportSession(); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Shutdown] ExportSession failed: {ex.Message}"); }
-            _engine.Stop();
-            _trayIcon?.Dispose();
-            UnregisterGlobalHotkeys();
-            _trayIcon = null;
+            if (PanelBase == null) return;
+            PanelBase.Visibility = t == "Base" ? Visibility.Visible : Visibility.Collapsed;
+            PanelL1.Visibility   = t == "L1"   ? Visibility.Visible : Visibility.Collapsed;
+            PanelR1.Visibility   = t == "R1"   ? Visibility.Visible : Visibility.Collapsed;
+            PanelL2.Visibility   = t == "L2"   ? Visibility.Visible : Visibility.Collapsed;
+            PanelR2.Visibility   = t == "R2"   ? Visibility.Visible : Visibility.Collapsed;
+            PanelInfo.Visibility = t == "Info" ? Visibility.Visible : Visibility.Collapsed;
+            PanelLog.Visibility  = t == "Log"  ? Visibility.Visible : Visibility.Collapsed;
+
+            var normal = (Style)FindResource("TabButton");
+            var active = (Style)FindResource("TabButtonActive");
+            if (TabBtnBase != null) TabBtnBase.Style = t == "Base" ? active : normal;
+            if (TabBtnL1   != null) TabBtnL1.Style   = t == "L1"   ? active : normal;
+            if (TabBtnR1   != null) TabBtnR1.Style   = t == "R1"   ? active : normal;
+            if (TabBtnL2   != null) TabBtnL2.Style   = t == "L2"   ? active : normal;
+            if (TabBtnR2   != null) TabBtnR2.Style   = t == "R2"   ? active : normal;
+            if (TabBtnInfo != null) TabBtnInfo.Style  = t == "Info" ? active : normal;
+            if (TabBtnLog  != null) TabBtnLog.Style   = t == "Log"  ? active : normal;
         }
 
-        private void BtnClearLog_Click(object s, RoutedEventArgs e)
+        // --------------------------------------------------------
+        //  Log Tab
+        // --------------------------------------------------------
+        private void BtnLogClear_Click(object s, RoutedEventArgs e)
         {
             _logBuffer.Clear();
-            _engine.Logger.ClearBuffer();
-            LogTextBlock.Text = string.Empty;
+            if (LogTextBlockTab != null) LogTextBlockTab.Text = "";
         }
 
-        private void BtnExportLog_Click(object s, RoutedEventArgs e)
+        private void LogFilter_Changed(object s, RoutedEventArgs e) => ApplyLogFilter();
+
+        private void ApplyLogFilter()
         {
-            try
+            if (LogTextBlockTab == null) return;
+            bool showEngine  = LogFilterEngine?.IsChecked  == true;
+            bool showInput   = LogFilterInput?.IsChecked   == true;
+            bool showProfile = LogFilterProfile?.IsChecked == true;
+            bool showErrors  = LogFilterErrors?.IsChecked  == true;
+
+            var filtered = _logBuffer.Where(line =>
             {
-                var dialog = new Microsoft.Win32.SaveFileDialog
-                {
-                    Filter = "Log Files (*.log)|*.log|Text Files (*.txt)|*.txt",
-                    FileName = $"RagnaController_{DateTime.Now:yyyy-MM-dd_HH-mm}.log",
-                    DefaultExt = ".log"
-                };
-                if (dialog.ShowDialog() == true)
-                {
-                    var path = _engine.Logger.ExportSession();
-                    // Copy to user-chosen location
-                    System.IO.File.Copy(path, dialog.FileName, overwrite: true);
-                    MessageBox.Show($"Log saved:\n{dialog.FileName}", "Export",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Export failed:\n{ex.Message}", "Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+                if (showErrors  && (line.Contains("ERR") || line.Contains("⚠") || line.Contains("getrennt"))) return true;
+                if (showProfile && (line.Contains("Profil") || line.Contains("profil") || line.Contains("Layer") || line.Contains("Controller verbunden"))) return true;
+                if (showInput   && (line.Contains("Taste") || line.Contains("Click") || line.Contains("Key") || line.Contains("Turbo"))) return true;
+                if (showEngine  && !(line.Contains("Profil") || line.Contains("Taste") || line.Contains("ERR") || line.Contains("⚠"))) return true;
+                return false;
+            });
+
+            LogTextBlockTab.Text = string.Join("\n", filtered);
         }
 
-        private void Window_MouseLeftButtonDown(object s, MouseButtonEventArgs e)
+        private void BtnLogExport_Click(object s, RoutedEventArgs e)
         {
-            if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-        }
-
-        private void RestoreWindowPosition()
-        {
-            if (string.IsNullOrEmpty(_settings.WindowPosition)) return;
-            try
+            string text = LogTextBlockTab?.Text ?? "";
+            if (string.IsNullOrWhiteSpace(text)) return;
+            var dlg = new Microsoft.Win32.SaveFileDialog
             {
-                var parts = _settings.WindowPosition.Split(',');
-                if (parts.Length == 2 &&
-                    double.TryParse(parts[0], out double left) &&
-                    double.TryParse(parts[1], out double top))
-                {
-                    // Ensure window is on a visible monitor
-                    var screen = System.Windows.SystemParameters.WorkArea;
-                    if (left >= 0 && top >= 0 &&
-                        left < screen.Width - 100 &&
-                        top  < screen.Height - 100)
-                    {
-                        Left = left;
-                        Top  = top;
-                    }
-                }
-            }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[MainWindow] Window position error: {ex.Message}"); }
-        }
-
-        private void UpdateBatteryDisplay(string level)
-        {
-            string icon = level switch
-            {
-                "Full"   => "🔋 FULL",
-                "Medium" => "🔋 MEDIUM",
-                "Low"    => "⚠ LOW",
-                "Empty"  => "❌ EMPTY",
-                "Wired"  => "🔌 WIRED",
-                _        => ""
+                Title  = "Log exportieren",
+                Filter = "Textdatei|*.txt",
+                FileName = $"RagnaController_Log_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt"
             };
-            // StatusBattery is optional – only update if present
-            if (StatusBattery != null)
+            if (dlg.ShowDialog() == true)
             {
-                StatusBattery.Text = icon;
-                StatusBattery.Foreground = new SolidColorBrush(
-                    level == "Low" || level == "Empty"
-                        ? Color.FromRgb(255, 68, 68)
-                        : Color.FromRgb(57, 255, 20));
+                try { File.WriteAllText(dlg.FileName, text); }
+                catch (Exception ex) { MessageBox.Show("Export fehlgeschlagen: " + ex.Message); }
             }
         }
-
-        private void BtnMinimize_Click(object s, RoutedEventArgs e) => WindowState = WindowState.Minimized;
-        private void BtnClose_Click   (object s, RoutedEventArgs e) => Close();
-
-        // Stubs
-        private void BtnSettings_Click(object s, RoutedEventArgs e)
-        {
-            var win = new SettingsWindow(_settings, ApplySettings) { Owner = this };
-            win.ShowDialog();
-        }
-
-        private void ApplySettings(Models.Settings s)
-        {
-            // Feedback
-            _engine.SetSoundEnabled (s.SoundEnabled);
-            _engine.SetRumbleEnabled(s.RumbleEnabled);
-
-            // Stick-Visualisierung
-            LeftStickCanvas.Visibility  = s.ShowControllerViz ? Visibility.Visible : Visibility.Hidden;
-            RightStickCanvas.Visibility = s.ShowControllerViz ? Visibility.Visible : Visibility.Hidden;
-
-            // AdvancedLogger Level
-            _engine.Logger.MinimumLevel = (Core.LogLevel)s.LogLevel;
-        }
-
-        private async System.Threading.Tasks.Task CheckForUpdatesAsync()
-        {
-            // Starts after 3 seconds so the UI is fully loaded first
-            await System.Threading.Tasks.Task.Delay(3000);
-            await Core.UpdateChecker.CheckAndNotifyAsync(this);
-        }
-
-        private void MenuExit_Click     (object s, RoutedEventArgs e) => Close();
-        private void MenuMiniMode_Click (object s, RoutedEventArgs e) => SwitchToMiniMode();
     }
 }

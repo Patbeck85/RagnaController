@@ -1,172 +1,53 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using System.Collections.Generic;
+using System.Windows.Media.Effects;
 
 namespace RagnaController
 {
-    /// <summary>
-    /// Live controller preview - shows button presses in real-time
-    /// </summary>
     public class ControllerPreview : Canvas
     {
-        private readonly Dictionary<string, Ellipse> _buttonIndicators = new();
-        private readonly SolidColorBrush _inactiveBrush = new(Color.FromRgb(0x1A, 0x20, 0x30));
-        private readonly SolidColorBrush _activeBrush = new(Color.FromRgb(0x00, 0xCF, 0xFF));
+        private readonly Dictionary<string, Shape> _shapes = new();
+        private readonly Dictionary<string, TextBlock> _labels = new();
+        private string? _highlight;
+        private readonly SolidColorBrush _body = new(Color.FromRgb(15, 18, 25)), _border = new(Color.FromRgb(40, 50, 70)), _off = new(Color.FromRgb(25, 30, 40)), _gold = new(Color.FromRgb(212, 168, 50)), _dim = new(Color.FromRgb(80, 90, 110));
+        
+        public ControllerPreview() { Width = 500; Height = 320; Background = Brushes.Transparent; Init(); }
 
-        public ControllerPreview()
-        {
-            Width = 400;
-            Height = 250;
-            Background = new SolidColorBrush(Color.FromRgb(0x0D, 0x10, 0x17));
-
-            InitializeController();
+        private void Init() {
+            Path b = new() { Stroke = _border, StrokeThickness = 3, Fill = _body, Data = Geometry.Parse("M 130,70 L 370,70 C 450,70 490,120 490,180 C 490,270 420,300 370,250 L 320,230 L 180,230 L 130,250 C 80,300 10,270 10,180 C 10,120 50,70 130,70") };
+            Children.Add(b);
+            Btn("LeftTrigger", 90, 15, 90, 40, "LT"); Btn("RightTrigger", 320, 15, 90, 40, "RT");
+            Btn("LeftShoulder", 90, 60, 80, 20, "LB"); Btn("RightShoulder", 330, 60, 80, 20, "RB");
+            Circ("LeftStick", 140, 165, 75, "L3", _border); Circ("RightStick", 285, 165, 75, "R3", _border);
+            Circ("A", 390, 160, 42, "A", new(Color.FromRgb(61, 219, 110))); Circ("B", 440, 120, 42, "B", new(Color.FromRgb(255, 58, 82)));
+            Circ("X", 340, 120, 42, "X", new(Color.FromRgb(58, 142, 255))); Circ("Y", 390, 80, 42, "Y", new(Color.FromRgb(255, 184, 0)));
+            Btn("DPadUp", 70, 105, 40, 40, "↑"); Btn("DPadDown", 70, 190, 40, 40, "↓");
+            Btn("DPadLeft", 35, 147, 40, 40, "←"); Btn("DPadRight", 105, 147, 40, 40, "→");
+            Btn("Back", 210, 115, 35, 20, "SEL"); Btn("Start", 255, 115, 35, 20, "STA");
         }
 
-        private void InitializeController()
-        {
-            // Controller body outline
-            var body = new Ellipse
-            {
-                Width = 320,
-                Height = 180,
-                Stroke = new SolidColorBrush(Color.FromRgb(0x3D, 0x4A, 0x6E)),
-                StrokeThickness = 2,
-                Fill = Brushes.Transparent
-            };
-            Canvas.SetLeft(body, 40);
-            Canvas.SetTop(body, 35);
-            Children.Add(body);
-
-            // Face buttons (right side)
-            AddButton("A", 280, 130, Color.FromRgb(0x3D, 0xDB, 0x6E));
-            AddButton("B", 310, 100, Color.FromRgb(0xFF, 0x3A, 0x52));
-            AddButton("X", 250, 100, Color.FromRgb(0x3A, 0x8E, 0xFF));
-            AddButton("Y", 280, 70, Color.FromRgb(0xFF, 0xB8, 0x00));
-
-            // D-Pad (left side)
-            AddButton("DPadUp", 120, 80, Color.FromRgb(0x8B, 0x97, 0xCC));
-            AddButton("DPadDown", 120, 130, Color.FromRgb(0x8B, 0x97, 0xCC));
-            AddButton("DPadLeft", 95, 105, Color.FromRgb(0x8B, 0x97, 0xCC));
-            AddButton("DPadRight", 145, 105, Color.FromRgb(0x8B, 0x97, 0xCC));
-
-            // Shoulders
-            AddButton("LeftShoulder", 80, 30, Color.FromRgb(0x9F, 0x7A, 0xFF));
-            AddButton("RightShoulder", 300, 30, Color.FromRgb(0x9F, 0x7A, 0xFF));
-
-            // Special buttons
-            AddButton("Start", 230, 105, Color.FromRgb(0x8B, 0x97, 0xCC));
-            AddButton("Back", 170, 105, Color.FromRgb(0x8B, 0x97, 0xCC));
-
-            // Sticks (show as larger circles)
-            var leftStick = new Ellipse
-            {
-                Width = 30,
-                Height = 30,
-                Stroke = new SolidColorBrush(Color.FromRgb(0x3D, 0x4A, 0x6E)),
-                StrokeThickness = 2,
-                Fill = _inactiveBrush
-            };
-            Canvas.SetLeft(leftStick, 130);
-            Canvas.SetTop(leftStick, 140);
-            Children.Add(leftStick);
-            _buttonIndicators["LeftStick"] = leftStick;
-
-            var rightStick = new Ellipse
-            {
-                Width = 30,
-                Height = 30,
-                Stroke = new SolidColorBrush(Color.FromRgb(0x3D, 0x4A, 0x6E)),
-                StrokeThickness = 2,
-                Fill = _inactiveBrush
-            };
-            Canvas.SetLeft(rightStick, 240);
-            Canvas.SetTop(rightStick, 140);
-            Children.Add(rightStick);
-            _buttonIndicators["RightStick"] = rightStick;
-
-            // Labels
-            var label = new TextBlock
-            {
-                Text = "LIVE PREVIEW",
-                FontSize = 10,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x3D, 0x4A, 0x6E))
-                // CharacterSpacing wurde entfernt (inkompatibel mit WPF TextBlock)
-            };
-            Canvas.SetLeft(label, 140);
-            Canvas.SetTop(label, 215);
-            Children.Add(label);
+        private void Circ(string id, double x, double y, double s, string l, SolidColorBrush c) {
+            Ellipse e = new() { Width = s, Height = s, Fill = _off, Stroke = c, StrokeThickness = 2.5 };
+            SetLeft(e, x); SetTop(e, y); _shapes[id] = e; Children.Add(e);
+            TextBlock t = new() { Text = l, Foreground = c, FontSize = 12, FontWeight = FontWeights.Bold, Width = s, TextAlignment = TextAlignment.Center };
+            SetLeft(t, x); SetTop(t, y + (s / 2) - 9); _labels[id] = t; Children.Add(t);
         }
 
-        private void AddButton(string name, double x, double y, Color color)
-        {
-            var button = new Ellipse
-            {
-                Width = 24,
-                Height = 24,
-                Stroke = new SolidColorBrush(color),
-                StrokeThickness = 2,
-                Fill = _inactiveBrush
-            };
-            Canvas.SetLeft(button, x - 12);
-            Canvas.SetTop(button, y - 12);
-            Children.Add(button);
-            _buttonIndicators[name] = button;
-
-            // Add label
-            var label = new TextBlock
-            {
-                Text = GetButtonLabel(name),
-                FontSize = 9,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(color)
-            };
-            Canvas.SetLeft(label, x - 6);
-            Canvas.SetTop(label, y - 5);
-            Children.Add(label);
+        private void Btn(string id, double x, double y, double w, double h, string l) {
+            Rectangle r = new() { Width = w, Height = h, Fill = _off, Stroke = _border, StrokeThickness = 2, RadiusX = 6, RadiusY = 6 };
+            SetLeft(r, x); SetTop(r, y); _shapes[id] = r; Children.Add(r);
+            TextBlock t = new() { Text = l, Foreground = _dim, FontSize = 11, FontWeight = FontWeights.Bold, Width = w, TextAlignment = TextAlignment.Center };
+            SetLeft(t, x); SetTop(t, y + (h / 2) - 9); _labels[id] = t; Children.Add(t);
         }
 
-        private string GetButtonLabel(string buttonName) => buttonName switch
-        {
-            "A" => "A",
-            "B" => "B",
-            "X" => "X",
-            "Y" => "Y",
-            "DPadUp" => "↑",
-            "DPadDown" => "↓",
-            "DPadLeft" => "←",
-            "DPadRight" => "→",
-            "LeftShoulder" => "LB",
-            "RightShoulder" => "RB",
-            "Start" => "▶",
-            "Back" => "◀",
-            _ => ""
-        };
-
-        public void UpdateButton(string buttonName, bool isPressed)
-        {
-            if (_buttonIndicators.TryGetValue(buttonName, out var indicator))
-            {
-                indicator.Fill = isPressed ? _activeBrush : _inactiveBrush;
-                
-                if (isPressed)
-                {
-                    indicator.Effect = new System.Windows.Media.Effects.DropShadowEffect
-                    {
-                        Color = Color.FromRgb(0x00, 0xCF, 0xFF),
-                        BlurRadius = 12,
-                        ShadowDepth = 0,
-                        Opacity = 0.8
-                    };
-                }
-                else
-                {
-                    indicator.Effect = null;
-                }
-            }
+        public void HighlightButton(string id) {
+            if (_highlight != null && _shapes.TryGetValue(_highlight, out var o)) { o.Fill = _off; o.Effect = null; if (_labels.TryGetValue(_highlight, out var l)) l.Foreground = o is Ellipse ? o.Stroke : _dim; }
+            string mapped = id == "LeftThumb" ? "LeftStick" : id == "RightThumb" ? "RightStick" : id;
+            if (_shapes.TryGetValue(mapped, out var s)) { _highlight = mapped; s.Fill = new SolidColorBrush(Color.FromArgb(60, 212, 168, 50)); s.Effect = new DropShadowEffect { Color = Color.FromRgb(212, 168, 50), BlurRadius = 20, ShadowDepth = 0, Opacity = 0.95 }; if (_labels.TryGetValue(mapped, out var l)) l.Foreground = _gold; }
         }
     }
 }

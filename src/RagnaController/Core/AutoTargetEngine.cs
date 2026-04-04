@@ -1,282 +1,183 @@
 using System;
-using RagnaController.Core;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RagnaController.Core
 {
-    /// <summary>
-    /// Melee Auto-Target System — no memory access, pure input simulation.
-    ///
-    /// How it works in Ragnarok Online:
-    ///   1. TAB          = cycles to next nearest monster (RO built-in)
-    ///   2. Right-Click  = lock target / attack-move to clicked monster
-    ///   3. Left-Click   = select monster under cursor
-    ///   4. Z key (default) = basic attack / use skill on current target
-    ///
-    /// Strategy:
-    ///   - RIGHT STICK held     → directional aim: move cursor in stick direction
-    ///   - R3 (right stick btn) → snap-cycle Tab to next target in aim direction
-    ///   - AUTO-ATTACK toggle   → when target locked, auto-repeat attack key
-    ///   - COMBAT MODE ON       → auto-retarget when target is lost (Tab-cycle)
-    /// </summary>
     public class AutoTargetEngine
     {
-        // ── Config (set from profile) ─────────────────────────────────────────────
-        public bool  AutoAttackEnabled   { get; set; } = true;
-        public bool  AutoRetargetEnabled { get; set; } = true;
-        public int   AttackKey_VK        { get; set; } = (int)VirtualKey.Z;
-        public int   TabCycleMs          { get; set; } = 80;   // How long between Tab presses during seek
-        public int   AttackIntervalMs    { get; set; } = 60;   // How fast auto-attack fires
-        public float AimSensitivity      { get; set; } = 22f;  // Cursor speed when aiming
-        public float AimDeadzone         { get; set; } = 0.20f;
+        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+        [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }
 
-        // ── State ─────────────────────────────────────────────────────────────────
-        public CombatState State           { get; private set; } = CombatState.Idle;
-        public bool         IsTargetLocked { get; private set; } = false;
-        public string       StateLabel     => State switch
+        public bool AutoAttackEnabled   { get; set; } = true;
+        public bool AutoRetargetEnabled { get; set; } = true;
+        public bool SmartSkillEnabled   { get; set; } = true;  // Cursor-Juggling opt-in
+        public int  AttackKey_VK        { get; set; } = 90;
+        public int  TabCycleMs          { get; set; } = 80;
+        public int  AttackIntervalMs    { get; set; } = 60;
+        public float AimSensitivity     { get; set; } = 22f;
+        public float AimDeadzone        { get; set; } = 0.20f;
+        public int  SkillInterruptMs    { get; set; } = 750;
+
+        public CombatState State            { get; private set; } = CombatState.Idle;
+        public bool IsTargetLocked          { get; private set; }
+        public bool SuppressMovementClicks  { get; private set; }
+        public string StateLabel => State switch
         {
-            CombatState.Seeking   => "SEEKING TARGET",
-            CombatState.Engaged   => "TARGET LOCKED",
-            CombatState.Attacking => "AUTO-ATTACKING",
+            CombatState.Seeking   => "SEEKING",
+            CombatState.Engaged   => "LOCKED",
+            CombatState.Attacking => _skillPause > 0 ? "SKILL PAUSE" : "ATTACKING",
             _                     => "IDLE"
         };
 
-        // Events for UI
         public event Action<CombatState>? StateChanged;
 
-        // ── Timers ────────────────────────────────────────────────────────────────
-        private int _tabCooldownMs      = 0;
-        private int _attackCooldownMs   = 0;
-        private int _retargetCooldownMs = 0;
-        private int _engagedMs          = 0;   // How long we've been engaged
-        private int _seekCycles         = 0;   // How many Tab presses during current seek
-        private int _aimSelectCooldown  = 0;   // Separate cooldown for AimDirectionalSelect clicks
+        // volatile: _skillPause and _ac are written from both Task.Run (SmartSkill) and the tick thread
+        private volatile int _tc, _ac, _rc, _ems, _sc, _asc, _wac;
+        private volatile int _skillPause;
+        private float _aax, _aay;
 
-        // ── Aim state ────────────────────────────────────────────────────────────
-        private float _aimX;
-        private float _aimY;
-        private float _aimAccumX;
-        private float _aimAccumY;
+        // Last known target position — updated on every lock and RS movement
+        private POINT _lockPos;
+        private bool  _lockPosValid = false;
 
-        // ── Public control ────────────────────────────────────────────────────────
+        // Semaphore verhindert dass mehrere SmartSkill-Tasks gleichzeitig laufen
+        private readonly SemaphoreSlim _skillSem = new(1, 1);
 
-        /// <summary>Toggle combat mode on/off (mapped to a button).</summary>
-        public void ToggleCombatMode()
+        public void ToggleCombatMode() { if (State == CombatState.Idle) EnterSeek(); else EnterIdle(); }
+
+        public void NotifySkillFired()
         {
-            if (State == CombatState.Idle)
-                EnterSeek();
-            else
-                EnterIdle();
+            _skillPause = SkillInterruptMs;
+            _ac         = SkillInterruptMs;
+            _wac        = SkillInterruptMs;
+            // RightClick only makes sense in Attacking state — in Seeking it would interrupt Tab cycling
+            if (State == CombatState.Attacking) InputSimulator.RightClick();
         }
 
-        /// <summary>Manually request immediate retarget (Tab cycle).</summary>
-        public void ManualRetarget()
-        {
-            if (State == CombatState.Idle) return;
-            _tabCooldownMs = 0;
-            DoTabCycle();
-        }
-
-        /// <summary>Signal that a target was manually selected (right-click lock).</summary>
         public void OnTargetLocked()
         {
             IsTargetLocked = true;
-            _seekCycles    = 0;
+            _sc = 0;
+            // Save cursor position when target is locked
+            if (GetCursorPos(out _lockPos)) _lockPosValid = true;
             SetState(CombatState.Engaged);
         }
 
-        /// <summary>Signal that target was lost (e.g. monster died, moved out of range).</summary>
         public void OnTargetLost()
         {
-            IsTargetLocked = false;
-            if (AutoRetargetEnabled && State != CombatState.Idle)
-            {
-                _retargetCooldownMs = 300; // Short pause then re-seek
-                SetState(CombatState.Seeking);
-            }
+            IsTargetLocked  = false;
+            _lockPosValid   = false;
+            if (AutoRetargetEnabled && State != CombatState.Idle) { _rc = 250; SetState(CombatState.Seeking); }
         }
 
-        // ── Main Update (call every tick, tickMs = 16) ────────────────────────────
-
         /// <summary>
-        /// Call every engine tick.
-        /// rightX/Y = right analog stick (-1..+1), pressed = R3 button,
-        /// rightShoulderHeld = RB/R1 held for aim-lock mode.
+        /// Smart Skill: snaps cursor to locked target, fires skill, restores cursor position.
+        /// Completes in ~15ms — invisible to the player.
+        /// Only called when SmartSkillEnabled && State != Idle && IsTargetLocked.
         /// </summary>
-        public void Update(float rightX, float rightY, bool r3Pressed, bool r3WasPressed,
-                           bool rightShoulderHeld, int tickMs)
+        public void FireSmartSkill(VirtualKey skillKey)
         {
-            TickCooldowns(tickMs);
-
-            // ── RIGHT STICK = directional aim ─────────────────────────────────────
-            float aimMag = MathF.Sqrt(rightX * rightX + rightY * rightY);
-            if (aimMag > AimDeadzone && AimDeadzone < 1f)
+            if (!SmartSkillEnabled || !IsTargetLocked || !_lockPosValid || State == CombatState.Idle)
             {
-                _aimX = rightX / aimMag * ((aimMag - AimDeadzone) / (1f - AimDeadzone));
-                _aimY = rightY / aimMag * ((aimMag - AimDeadzone) / (1f - AimDeadzone));
-
-                _aimAccumX += _aimX * AimSensitivity;
-                _aimAccumY += -_aimY * AimSensitivity;
-
-                int mx = (int)_aimAccumX;
-                int my = (int)_aimAccumY;
-                _aimAccumX -= mx;
-                _aimAccumY -= my;
-
-                if (mx != 0 || my != 0)
-                    InputSimulator.MoveMouseRelative(mx, my);
-            }
-            else
-            {
-                _aimX = _aimY = 0f;
+                // Fallback: no lock — TapKey + LeftClick so melee skills register
+                InputSimulator.TapKey(skillKey);
+                InputSimulator.LeftClick();
+                NotifySkillFired();
+                return;
             }
 
-            // ── R3 press = snap-target monster under cursor ───────────────────────
-            // Only snap when actively seeking/engaged/attacking (not Idle).
-            // In Idle, R3 is handled by HybridEngine as DoubleClick.
-            if (r3Pressed && !r3WasPressed && State != CombatState.Idle)
-                SnapTargetUnderCursor();
+            // Fire-and-forget mit Semaphore — kein async void race condition
+            Task.Run(async () =>
+            {
+                if (!await _skillSem.WaitAsync(0)) return; // skip if another skill is already in flight
+                try
+                {
+                    // 1. Save current cursor position
+                    GetCursorPos(out POINT saved);
 
-            // ── RB held + right stick = aim-then-select (directional snap) ────────
-            if (rightShoulderHeld && aimMag > AimDeadzone)
-                AimDirectionalSelect(tickMs);
+                    // 2. Snap cursor to locked target
+                    InputSimulator.MoveMouseAbsolute(_lockPos.X, _lockPos.Y);
 
-            // ── State machine ─────────────────────────────────────────────────────
+                    // 3. Fire skill key and click
+                    InputSimulator.TapKey(skillKey);
+                    await Task.Delay(12);
+                    InputSimulator.LeftClick();
+
+                    // 4. Restore cursor
+                    InputSimulator.MoveMouseAbsolute(saved.X, saved.Y);
+
+                    // 5. Pause auto-attacks during skill animation
+                    NotifySkillFired();
+                }
+                finally { _skillSem.Release(); }
+            });
+        }
+
+        public void Update(float rx, float ry, bool r3, bool r3w, bool rb, int ms, float lx = 0, float ly = 0)
+        {
+            _tc = Math.Max(0, _tc - ms); _ac = Math.Max(0, _ac - ms); _rc = Math.Max(0, _rc - ms);
+            _asc = Math.Max(0, _asc - ms); _wac = Math.Max(0, _wac - ms); _skillPause = Math.Max(0, _skillPause - ms);
+
+            float wsq = lx * lx + ly * ly;
+            SuppressMovementClicks = IsTargetLocked && wsq > 0.04f
+                && (State == CombatState.Attacking || _skillPause > 0);
+
+            if (SuppressMovementClicks && _wac <= 0)
+            {
+                float wm = MathF.Sqrt(wsq);
+                int wx = (int)(lx / wm * AimSensitivity * 0.7f), wy = (int)(-ly / wm * AimSensitivity * 0.7f);
+                if (wx != 0 || wy != 0) InputSimulator.MoveMouseRelative(wx, wy);
+                InputSimulator.RightClick(); _wac = 300;
+                // Lock-Position bei Bewegung aktualisieren
+                if (GetCursorPos(out _lockPos)) _lockPosValid = true;
+            }
+
+            float rsq = rx * rx + ry * ry;
+            if (rsq > AimDeadzone * AimDeadzone)
+            {
+                float rm = MathF.Sqrt(rsq), rn = (rm - AimDeadzone) / (1f - AimDeadzone);
+                _aax += (rx / rm * rn) * AimSensitivity; _aay += (-ry / rm * rn) * AimSensitivity;
+                int mx = (int)_aax, my = (int)_aay; _aax -= mx; _aay -= my;
+                if (mx != 0 || my != 0) InputSimulator.MoveMouseRelative(mx, my);
+                if (rb && _asc <= 0) { InputSimulator.LeftClick(); _asc = 150; }
+                // Manuelles Zielen aktualisiert Lock-Position
+                if (GetCursorPos(out _lockPos)) _lockPosValid = true;
+            }
+
+            if (r3 && !r3w && State != CombatState.Idle) { InputSimulator.RightClick(); OnTargetLocked(); }
+
             switch (State)
             {
                 case CombatState.Seeking:
-                    UpdateSeeking(tickMs);
+                    if (_rc <= 0 && _tc <= 0 && AutoRetargetEnabled)
+                    {
+                        InputSimulator.TapKey(VirtualKey.Tab);
+                        _tc = TabCycleMs;
+                        _sc++;
+                        if (_sc >= 3) OnTargetLocked();
+                    }
                     break;
-
                 case CombatState.Engaged:
-                    UpdateEngaged(tickMs);
+                    _ems += ms;
+                    if (AutoAttackEnabled && _ems >= 100) SetState(CombatState.Attacking);
                     break;
-
                 case CombatState.Attacking:
-                    UpdateAttacking(tickMs);
+                    if (_skillPause <= 0 && _ac <= 0)
+                    {
+                        InputSimulator.TapKey((VirtualKey)AttackKey_VK);
+                        _ac = AttackIntervalMs;
+                    }
+                    if (_rc <= 0) { InputSimulator.RightClick(); _rc = 2000; }
                     break;
             }
         }
 
-        // ── State machine ─────────────────────────────────────────────────────────
-
-        private void UpdateSeeking(int tickMs)
-        {
-            // Wait out the retarget cooldown (set by OnTargetLost) before seeking
-            if (_retargetCooldownMs > 0) return;
-
-            // Auto-retarget: press Tab until we lock something
-            if (_tabCooldownMs <= 0 && AutoRetargetEnabled)
-            {
-                DoTabCycle();
-                _seekCycles++;
-
-                // After 1 Tab press → assume we've targeted something, engage
-                // (RO selects the nearest monster with Tab)
-                if (_seekCycles >= 1)
-                {
-                    OnTargetLocked();
-                }
-            }
-        }
-
-        private void UpdateEngaged(int tickMs)
-        {
-            _engagedMs += tickMs;
-
-            // After a brief moment engaged → start auto-attacking
-            if (AutoAttackEnabled && _engagedMs >= 150)
-                SetState(CombatState.Attacking);
-        }
-
-        private void UpdateAttacking(int tickMs)
-        {
-            // Fire attack key on interval
-            if (_attackCooldownMs <= 0)
-            {
-                InputSimulator.TapKey((VirtualKey)AttackKey_VK);
-                _attackCooldownMs = AttackIntervalMs;
-            }
-
-            // Periodically re-confirm target with right-click (keeps lock alive in RO)
-            if (_retargetCooldownMs <= 0)
-            {
-                InputSimulator.RightClick();
-                _retargetCooldownMs = 3000; // Every 3 seconds
-            }
-        }
-
-        // ── Input helpers ─────────────────────────────────────────────────────────
-
-        /// <summary>Press Tab to cycle to next nearest monster.</summary>
-        private void DoTabCycle()
-        {
-            InputSimulator.TapKey(VirtualKey.Tab);
-            _tabCooldownMs = TabCycleMs;
-        }
-
-        /// <summary>Right-click monster under cursor to lock + attack.</summary>
-        private void SnapTargetUnderCursor()
-        {
-            InputSimulator.RightClick();
-            OnTargetLocked();
-        }
-
-        /// <summary>
-        /// While RB is held and right stick is pushed: move cursor in stick direction,
-        /// then left-click to select monster. Creates a "directional snap" feel.
-        /// </summary>
-        private void AimDirectionalSelect(int tickMs)
-        {
-            // Click after the cursor has been aimed (separate cooldown from Tab)
-            if (_aimSelectCooldown <= 0)
-            {
-                InputSimulator.LeftClick();
-                _aimSelectCooldown = 200; // Prevent rapid-fire clicks
-            }
-        }
-
-        // ── Transitions ───────────────────────────────────────────────────────────
-
-        private void EnterSeek()
-        {
-            _seekCycles    = 0;
-            _tabCooldownMs = 0;
-            _engagedMs     = 0;
-            IsTargetLocked = false;
-            SetState(CombatState.Seeking);
-        }
-
-        private void EnterIdle()
-        {
-            IsTargetLocked = false;
-            _seekCycles    = 0;
-            _engagedMs     = 0;
-            SetState(CombatState.Idle);
-        }
-
-        private void SetState(CombatState newState)
-        {
-            if (State == newState) return;
-            State = newState;
-            StateChanged?.Invoke(newState);
-        }
-
-        private void TickCooldowns(int ms)
-        {
-            _tabCooldownMs      = Math.Max(0, _tabCooldownMs      - ms);
-            _attackCooldownMs   = Math.Max(0, _attackCooldownMs   - ms);
-            _retargetCooldownMs = Math.Max(0, _retargetCooldownMs - ms);
-            _aimSelectCooldown  = Math.Max(0, _aimSelectCooldown  - ms);
-        }
+        private void EnterSeek() { _sc = 0; _tc = 0; _ems = 0; IsTargetLocked = false; _lockPosValid = false; SetState(CombatState.Seeking); }
+        private void EnterIdle() { IsTargetLocked = false; _lockPosValid = false; SetState(CombatState.Idle); }
+        private void SetState(CombatState s) { if (State == s) return; State = s; StateChanged?.Invoke(s); }
     }
 
-    // ── Enums ─────────────────────────────────────────────────────────────────────
-
-    public enum CombatState
-    {
-        Idle,       // Engine off / not in combat
-        Seeking,    // Pressing Tab to find nearest monster
-        Engaged,    // Target selected, preparing to attack
-        Attacking   // Firing attack key on interval
-    }
+    public enum CombatState { Idle, Seeking, Engaged, Attacking }
 }

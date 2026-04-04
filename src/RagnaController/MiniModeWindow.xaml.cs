@@ -1,5 +1,8 @@
+using System;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using RagnaController.Core;
 
@@ -7,69 +10,98 @@ namespace RagnaController
 {
     public partial class MiniModeWindow : Window
     {
+        // Win32 API for click-through overlay (WS_EX_TRANSPARENT)
+        private const int GWL_EXSTYLE     = -20;
+        private const int WS_EX_TRANSPARENT = 0x00000020;
+        private const int WS_EX_LAYERED    = 0x00080000;
+
+        [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr h, int i);
+        [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr h, int i, int v);
+
+        private bool _clickThrough = false;
+
         public MiniModeWindow()
         {
             InitializeComponent();
-            // Intercept all close attempts (including the title-bar X if ever shown)
-            // so MainWindow always knows we're gone and can clear its _miniWindow reference.
-            Closing += (_, _) =>
+            Loaded += (_, _) => UpdateClickThrough();
+        }
+
+        // Click-Through umschalten (Rechtsklick auf X-Button)
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
+        {
+            // FIX: Sichere Methode, um das MainWindow zu finden, das dieses Mini-Fenster geöffnet hat.
+            if (this.Owner is MainWindow mainOwner)
             {
-                var mainWindow = Application.Current?.MainWindow as MainWindow;
-                mainWindow?.SwitchFromMiniMode();
-            };
+                mainOwner.SwitchFromMiniMode();
+            }
+            else
+            {
+                // Fallback, falls der Owner aus irgendeinem Grund verloren ging
+                foreach (Window window in Application.Current.Windows)
+                {
+                    if (window is MainWindow mainWindow)
+                    {
+                        mainWindow.SwitchFromMiniMode();
+                        return;
+                    }
+                }
+                // Absoluter Notfall-Fallback
+                Close();
+            }
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ButtonState == MouseButtonState.Pressed)
-                DragMove();
+            if (e.LeftButton == MouseButtonState.Pressed) DragMove();
         }
 
-        private void BtnClose_Click(object sender, RoutedEventArgs e)
+        private void Window_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Switch back to full mode
-            var mainWindow = Application.Current.MainWindow as MainWindow;
-            mainWindow?.SwitchFromMiniMode();
+            _clickThrough = !_clickThrough;
+            UpdateClickThrough();
+            // Visuelles Feedback: Rand blinkt kurz
+            BorderBrush = _clickThrough
+                ? new SolidColorBrush(Color.FromRgb(0x3A, 0x8E, 0xFF))
+                : new SolidColorBrush(Color.FromRgb(0xE5, 0xB8, 0x42));
         }
 
-        public void UpdateState(string profile, string state, bool isActive, CombatState combatState)
+        private void UpdateClickThrough()
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            int style = GetWindowLong(hwnd, GWL_EXSTYLE);
+            if (_clickThrough)
+                SetWindowLong(hwnd, GWL_EXSTYLE, style | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+            else
+                SetWindowLong(hwnd, GWL_EXSTYLE, style & ~WS_EX_TRANSPARENT);
+        }
+
+        public void UpdateState(string profile, string state, bool active, CombatState combat)
         {
             Dispatcher.Invoke(() =>
             {
+                if (ProfileText == null) return;
                 ProfileText.Text = profile.ToUpper();
-                StateText.Text = state;
-
-                if (isActive)
+                StateText.Text   = state;
+                StatusBrush.Color  = active ? Color.FromRgb(0x3D, 0xDB, 0x6E) : Color.FromRgb(0xFF, 0x3A, 0x52);
+                StateIcon.Text = combat switch
                 {
-                    StatusColor.Color = Color.FromRgb(0x3D, 0xDB, 0x6E); // Green
-                    StateIconColor.Color = GetStateColor(combatState);
-                    StateIcon.Text = GetStateIcon(combatState);
-                }
-                else
-                {
-                    StatusColor.Color = Color.FromRgb(0xFF, 0x3A, 0x52); // Red
-                    StateIconColor.Color = Color.FromRgb(0x8B, 0x97, 0xCC);
-                    StateIcon.Text = "■";
-                }
-
-                StateTextColor.Color = StateIconColor.Color;
+                    CombatState.Seeking   => "⟳",
+                    CombatState.Engaged   => "●",
+                    CombatState.Attacking => "▶",
+                    _                     => "■"
+                };
+                Color iconCol = active
+                    ? (combat switch
+                    {
+                        CombatState.Seeking   => Color.FromRgb(0xFF, 0xB8, 0x00),
+                        CombatState.Attacking => Color.FromRgb(0xFF, 0x3A, 0x52),
+                        _                     => Color.FromRgb(0x3D, 0xDB, 0x6E)
+                    })
+                    : Color.FromRgb(0x8B, 0x97, 0xCC);
+                StateIconBrush.Color = iconCol;
+                StateTextBrush.Color = iconCol;
             });
         }
-
-        private Color GetStateColor(CombatState state) => state switch
-        {
-            CombatState.Seeking   => Color.FromRgb(0xFF, 0xB8, 0x00),
-            CombatState.Engaged   => Color.FromRgb(0x3D, 0xDB, 0x6E),
-            CombatState.Attacking => Color.FromRgb(0xFF, 0x3A, 0x52),
-            _                     => Color.FromRgb(0x3D, 0x4A, 0x6E)
-        };
-
-        private string GetStateIcon(CombatState state) => state switch
-        {
-            CombatState.Seeking   => "⟳",
-            CombatState.Engaged   => "●",
-            CombatState.Attacking => "▶",
-            _                     => "■"
-        };
     }
 }

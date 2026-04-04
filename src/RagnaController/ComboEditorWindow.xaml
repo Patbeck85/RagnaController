@@ -1,0 +1,68 @@
+<Window x:Class="RagnaController.ComboEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Combo Editor" Width="750" Height="680"
+        Background="Transparent" WindowStyle="None" AllowsTransparency="True"
+        WindowStartupLocation="CenterOwner" MouseLeftButtonDown="Window_MouseLeftButtonDown">
+    <Border Background="#080A0F" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="10">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="45"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" BorderBrush="#2A3245" BorderThickness="0,0,0,1">
+                <Grid Margin="20,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="⚡" Foreground="#E5B842" Margin="0,0,10,0" FontSize="16" Effect="{StaticResource NeonGlow}"/>
+                        <TextBlock Text="COMBO ENGINE EDITOR" FontWeight="Bold" FontSize="13" Foreground="#F0F4F8"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <CheckBox x:Name="ChkEnabled" Content="Combo Active" Foreground="#39FF14" FontWeight="Bold" Margin="0,0,20,0" VerticalAlignment="Center"/>
+                        <Button Content="✕" Click="BtnClose_Click" Width="30" Height="30" Background="Transparent" BorderThickness="0" Foreground="#A1B0C5" FontSize="14"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <Border Grid.Row="1" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="SELECT CLASS TEMPLATE" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Margin="0,0,0,12"/>
+                    <WrapPanel x:Name="ClassCards"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Row="2" Style="{StaticResource CardBorder}" Margin="20,0" Padding="15">
+                <TextBlock x:Name="HintText" Foreground="#A1B0C5" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" LineHeight="18"/>
+            </Border>
+            <Border Grid.Row="3" Margin="20,20,20,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
+                        <TextBlock Text="DELAYS (" Foreground="#7D8B9E" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Button x:Name="BtnTabPre" Content="PRE-RENEWAL" Click="BtnTabPre_Click" Height="30" Padding="15,0" Style="{StaticResource ConsolePrimaryBtn}" FontSize="11"/>
+                        <Button x:Name="BtnTabRen" Content="RENEWAL" Click="BtnTabRen_Click" Height="30" Padding="15,0" Style="{StaticResource ConsoleGhostBtn}" FontSize="11" Margin="8,0,0,0"/>
+                        <TextBlock Text=")" Foreground="#7D8B9E" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ChainPanel"/>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,15,0,0">
+                        <Button Content="+ Add Step" Click="BtnAdd_Click" Style="{StaticResource ConsoleGhostBtn}" Height="34" Padding="15,0" Margin="0,0,10,0"/>
+                        <Button Content="− Remove Last" Click="BtnRemove_Click" Style="{StaticResource ConsoleDangerBtn}" Height="34" Padding="15,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <Border Grid.Row="4" Background="#07090D" BorderBrush="#2A3245" BorderThickness="0,1,0,0" CornerRadius="0,0,10,10" Padding="20,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock Text="Trigger: Map a button to 'Class Combo' and HOLD it." Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,20,0"/>
+                    <Button Content="SAVE COMBO" Click="BtnSave_Click" Style="{StaticResource ConsolePrimaryBtn}" Width="140" Height="36" Margin="0,0,10,0"/>
+                    <Button Content="Cancel" Click="BtnClose_Click" Style="{StaticResource ConsoleGhostBtn}" Width="90" Height="36"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

@@ -1,0 +1,23 @@
+<Window x:Class="RagnaController.RadialMenuWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Radial Menu" Width="440" Height="440"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" WindowStartupLocation="CenterScreen" ShowInTaskbar="False">
+    <Grid x:Name="RootGrid" Opacity="0">
+        <Ellipse Width="340" Height="340" Stroke="#E5B842" StrokeThickness="2" Fill="#E6080A0F">
+            <Ellipse.Effect>
+                <DropShadowEffect Color="#E5B842" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
+            </Ellipse.Effect>
+        </Ellipse>
+        <Canvas x:Name="ItemsCanvas" Width="340" Height="340" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="SelectedText" Text="SELECT ITEM" Foreground="#E5B842" FontWeight="Black" FontSize="18" HorizontalAlignment="Center">
+                <TextBlock.Effect>
+                    <DropShadowEffect Color="#E5B842" BlurRadius="15" ShadowDepth="0"/>
+                </TextBlock.Effect>
+            </TextBlock>
+            <TextBlock Text="Release triggers to use" Foreground="#A1B0C5" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>

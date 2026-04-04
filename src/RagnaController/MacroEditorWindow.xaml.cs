@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
@@ -13,177 +12,55 @@ namespace RagnaController
     public partial class MacroEditorWindow : Window
     {
         private Macro _macro = null!;
-        private readonly string _filePath;
-        private ObservableCollection<MacroStepViewModel> _steps = null!;
+        private readonly string _path;
+        private ObservableCollection<MacroStepVM> _steps = null!;
 
-        public MacroEditorWindow(string macroFilePath)
+        public MacroEditorWindow(string path)
         {
             InitializeComponent();
-            _filePath = macroFilePath;
-            LoadMacro();
+            _path = path;
+            Load();
         }
 
-        private void LoadMacro()
+        private void Load()
         {
-            try
-            {
-                if (!File.Exists(_filePath))
-                {
-                    _macro = new Macro { Name = "New Macro", Steps = new List<MacroStep>() };
-                }
-                else
-                {
-                    string json = File.ReadAllText(_filePath);
-                    _macro = JsonSerializer.Deserialize<Macro>(json) ?? new Macro { Steps = new List<MacroStep>() };
-                }
-                
-                NameText.Text      = _macro.Name;
+            try {
+                _macro = File.Exists(_path) ? JsonSerializer.Deserialize<Macro>(File.ReadAllText(_path)) ?? new Macro() : new Macro();
+                NameText.Text = _macro.Name;
                 LoopCountText.Text = _macro.LoopCount.ToString();
-                MacroInfo.Text     = $"Editing: {Path.GetFileName(_filePath)}";
-                
-                _steps = new ObservableCollection<MacroStepViewModel>(
-                    _macro.Steps.Select((s, i) => new MacroStepViewModel(i + 1, s))
-                );
-                
+                _steps = new ObservableCollection<MacroStepVM>(_macro.Steps.Select((s, i) => new MacroStepVM(i + 1, s)));
                 StepsGrid.ItemsSource = _steps;
-                UpdateDuration();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to load macro:\n{ex.Message}", "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                this.Close();
-            }
+                UpdateDur();
+            } catch { Close(); }
         }
 
-        private void UpdateDuration()
-        {
-            if (_steps == null) return;
-            int total = _steps.Sum(s => s.DelayMs);
-            DurationText.Text = $"Duration: {total}ms";
-            if (_macro != null) _macro.TotalDurationMs = total;
+        private void UpdateDur() { if (_steps != null) DurationText.Text = $"Duration: {_steps.Sum(s => s.DelayMs)}ms"; }
+        private void Reindex() { for (int i = 0; i < _steps.Count; i++) _steps[i].Index = i + 1; }
+        private void BtnMoveUp_Click(object sender, RoutedEventArgs e) { if (sender is Button b && b.Tag is MacroStepVM s) { int i = _steps.IndexOf(s); if (i > 0) { _steps.Move(i, i - 1); Reindex(); } } }
+        private void BtnMoveDown_Click(object sender, RoutedEventArgs e) { if (sender is Button b && b.Tag is MacroStepVM s) { int i = _steps.IndexOf(s); if (i < _steps.Count - 1) { _steps.Move(i, i + 1); Reindex(); } } }
+        private void BtnDeleteStep_Click(object sender, RoutedEventArgs e) { if (sender is Button b && b.Tag is MacroStepVM s) { _steps.Remove(s); Reindex(); UpdateDur(); } }
+        private void BtnSpeedUp_Click(object sender, RoutedEventArgs e) { foreach (var s in _steps) s.DelayMs = Math.Max(30, s.DelayMs / 2); UpdateDur(); }
+        private void BtnSlowDown_Click(object sender, RoutedEventArgs e) { foreach (var s in _steps) s.DelayMs *= 2; UpdateDur(); }
+        private void BtnOptimize_Click(object sender, RoutedEventArgs e) { var opt = _steps.Where(s => s.DelayMs >= 30).ToList(); _steps.Clear(); foreach (var s in opt) _steps.Add(s); Reindex(); UpdateDur(); }
+        private void BtnAddStep_Click(object sender, RoutedEventArgs e) { var s = new MacroStepVM(_steps.Count + 1, new MacroStep { Type = MacroStepType.Delay, DelayMs = 200 }); _steps.Add(s); UpdateDur(); StepsGrid.ScrollIntoView(s); }
+        private void BtnPreview_Click(object sender, RoutedEventArgs e) { MessageBox.Show(string.Join("\n", _steps.Take(10).Select(s => $"{s.Index}. {s.Type} ({s.DelayMs}ms)"))); }
+        private void BtnCancel_Click(object sender, RoutedEventArgs e) => Close();
+        private void BtnSave_Click(object sender, RoutedEventArgs e) {
+            _macro.Name = NameText.Text;
+            _macro.LoopCount = int.TryParse(LoopCountText.Text, out int l) ? Math.Max(0, l) : 1;
+            _macro.Steps = _steps.Select(v => new MacroStep { Type = v.Type, Key = v.Key, DelayMs = v.DelayMs }).ToList();
+            File.WriteAllText(_path, JsonSerializer.Serialize(_macro, new JsonSerializerOptions { WriteIndented = true }));
+            DialogResult = true; Close();
         }
-
-        private void BtnMoveUp_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.Tag is MacroStepViewModel step)
-            {
-                int index = _steps.IndexOf(step);
-                if (index > 0)
-                {
-                    _steps.Move(index, index - 1);
-                    ReindexSteps();
-                }
-            }
-        }
-
-        private void BtnMoveDown_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.Tag is MacroStepViewModel step)
-            {
-                int index = _steps.IndexOf(step);
-                if (index < _steps.Count - 1)
-                {
-                    _steps.Move(index, index + 1);
-                    ReindexSteps();
-                }
-            }
-        }
-
-        private void BtnDeleteStep_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.Tag is MacroStepViewModel step)
-            {
-                if (MessageBox.Show($"Delete step {step.Index}?", "Confirm", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
-                {
-                    _steps.Remove(step);
-                    ReindexSteps();
-                    UpdateDuration();
-                }
-            }
-        }
-
-        private void ReindexSteps()
-        {
-            for (int i = 0; i < _steps.Count; i++) _steps[i].Index = i + 1;
-        }
-
-        private void BtnSpeedUp_Click(object sender, RoutedEventArgs e)
-        {
-            foreach (var s in _steps) s.DelayMs = Math.Max(30, s.DelayMs / 2);
-            UpdateDuration();
-        }
-
-        private void BtnSlowDown_Click(object sender, RoutedEventArgs e)
-        {
-            foreach (var s in _steps) s.DelayMs *= 2;
-            UpdateDuration();
-        }
-
-        private void BtnOptimize_Click(object sender, RoutedEventArgs e)
-        {
-            var optimized = _steps.Where(s => s.DelayMs >= 30).ToList();
-            _steps.Clear();
-            foreach (var s in optimized) _steps.Add(s);
-            ReindexSteps();
-            UpdateDuration();
-        }
-
-        private void BtnAddStep_Click(object sender, RoutedEventArgs e)
-        {
-            // Add a default 200ms delay step at end
-            var newStep = new MacroStep { Type = MacroStepType.Delay, Key = VirtualKey.None, DelayMs = 200 };
-            var vm = new MacroStepViewModel(_steps.Count + 1, newStep);
-            _steps.Add(vm);
-            UpdateDuration();
-            // Scroll to new item
-            StepsGrid.ScrollIntoView(vm);
-        }
-
-        private void BtnPreview_Click(object sender, RoutedEventArgs e)
-        {
-            var p = string.Join("\n", _steps.Take(10).Select(s => s.Type == MacroStepType.KeyPress || s.Type == MacroStepType.Delay
-                ? $"{s.Index}. {s.Type}: {s.Key} ({s.DelayMs}ms)"
-                : $"{s.Index}. {s.Type} ({s.DelayMs}ms)"));
-            MessageBox.Show($"Preview (first 10):\n{p}", "Preview");
-        }
-
-        private void BtnSave_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                _macro.Name      = NameText.Text;
-                _macro.LoopCount = int.TryParse(LoopCountText.Text, out int lc) ? Math.Max(0, lc) : 1;
-                _macro.Steps     = _steps.Select(vm => vm.ToMacroStep()).ToList();
-                File.WriteAllText(_filePath, JsonSerializer.Serialize(_macro, new JsonSerializerOptions { WriteIndented = true }));
-                DialogResult = true;
-                this.Close();
-            }
-            catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}"); }
-        }
-
-        private void BtnCancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; this.Close(); }
     }
 
-    public class MacroStepViewModel : System.ComponentModel.INotifyPropertyChanged
-    {
-        private int _index;
-        private int _delayMs;
-        public int Index { get => _index; set { _index = value; OnPropertyChanged(nameof(Index)); } }
+    public class MacroStepVM : System.ComponentModel.INotifyPropertyChanged {
+        private int _idx, _ms;
+        public int Index { get => _idx; set { _idx = value; PropertyChanged?.Invoke(this, new(nameof(Index))); } }
         public MacroStepType Type { get; set; }
         public VirtualKey Key { get; set; }
-        public int DelayMs { get => _delayMs; set { _delayMs = value; OnPropertyChanged(nameof(DelayMs)); } }
-
-        public MacroStepViewModel(int index, MacroStep step)
-        {
-            _index = index;
-            Type = step.Type;
-            Key = step.Key;
-            _delayMs = step.DelayMs;
-        }
-
-        public MacroStep ToMacroStep() => new MacroStep { Type = Type, Key = Key, DelayMs = DelayMs };
-
+        public int DelayMs { get => _ms; set { _ms = value; PropertyChanged?.Invoke(this, new(nameof(DelayMs))); } }
+        public MacroStepVM(int i, MacroStep s) { _idx = i; Type = s.Type; Key = s.Key; _ms = s.DelayMs; }
         public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
     }
 }

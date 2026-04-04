@@ -1,204 +1,102 @@
 using System;
 using System.Runtime.InteropServices;
-using System.Threading;
+using System.Threading.Tasks;
 
 namespace RagnaController.Core
 {
-    /// <summary>
-    /// Highly optimized input simulator for Ragnarok Online.
-    /// Combines hardware scan codes, absolute positioning and RO-compatible timing.
-    /// </summary>
     public static class InputSimulator
     {
-        // ── Windows API Imports ──────────────────────────────────────────────────
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+        [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint n, INPUT[] p, int s);
+        [DllImport("user32.dll")] private static extern uint MapVirtualKey(uint c, uint t);
+        [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
 
-        [DllImport("user32.dll")]
-        private static extern uint MapVirtualKey(uint uCode, uint uMapType);
+        private static readonly int Size = Marshal.SizeOf<INPUT>();
+        private static readonly int KeyDelay = 12;
+        private static readonly int ClickDelay = 10;
 
-        [DllImport("user32.dll")]
-        private static extern bool SetCursorPos(int x, int y);
+        private static volatile bool _leftClickInFlight = false;
+        private static volatile bool _rightClickInFlight = false;
+        private static volatile bool _mouseMoveInFlight = false;
 
-        private static readonly int InputSize = Marshal.SizeOf<INPUT>();
-
-        // ── Mouse functions ──────────────────────────────────────────────────────
-
-        /// <summary>Sets the cursor to an exact screen coordinate (important for MovementEngine).</summary>
-        public static void MoveMouseAbsolute(int x, int y)
-        {
-            SetCursorPos(x, y);
-        }
-
-        /// <summary>Moves the cursor relative to its current position.</summary>
-        public static void MoveMouseRelative(int dx, int dy)
-        {
+        // ANTI-FREEZE: SetCursorPos in den Hintergrund verlagern
+        public static void MoveMouseAbsolute(int x, int y) => Task.Run(() => SetCursorPos(x, y));
+        
+        // ANTI-FREEZE: Wenn das Spiel SendInput blockiert, stürzt die App nicht mehr ab!
+        public static void MoveMouseRelative(int dx, int dy) 
+        { 
             if (dx == 0 && dy == 0) return;
-            var inputs = new INPUT[1];
-            inputs[0].type = 0; // Mouse
-            inputs[0].Data.mi.dx = dx;
-            inputs[0].Data.mi.dy = dy;
-            inputs[0].Data.mi.dwFlags = 0x0001; // MOUSEEVENTF_MOVE
-            SendInput(1, inputs, InputSize);
-        }
-
-        public static void LeftClick()
-        {
-            // Fire Down+Up on a background thread so the engine tick is never blocked.
-            // 8ms hold = minimum RO requires to register a click (1 tick at 125fps).
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                LeftButtonDown();
-                System.Threading.Thread.Sleep(8);
-                LeftButtonUp();
-            });
-        }
-
-        public static void RightClick()
-        {
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                var inputs = new INPUT[1];
-                inputs[0].type = 0;
-                inputs[0].Data.mi.dwFlags = 0x0008; // RightDown
-                SendInput(1, inputs, InputSize);
-                System.Threading.Thread.Sleep(8);
-                inputs[0].Data.mi.dwFlags = 0x0010; // RightUp
-                SendInput(1, inputs, InputSize);
-            });
-        }
-
-        public static void LeftButtonDown()
-        {
-            var inputs = new INPUT[1];
-            inputs[0].type = 0;
-            inputs[0].Data.mi.dwFlags = 0x0002; // LeftDown
-            SendInput(1, inputs, InputSize);
-        }
-
-        public static void LeftButtonUp()
-        {
-            var inputs = new INPUT[1];
-            inputs[0].type = 0;
-            inputs[0].Data.mi.dwFlags = 0x0004; // LeftUp
-            SendInput(1, inputs, InputSize);
-        }
-
-        public static void ScrollWheel(int delta)
-        {
-            var inputs = new INPUT[1];
-            inputs[0].type = 0;
-            inputs[0].Data.mi.dwFlags = 0x0800; // Wheel
-            inputs[0].Data.mi.mouseData = (uint)delta;
-            SendInput(1, inputs, InputSize);
-        }
-
-        // ── Keyboard functions ────────────────────────────────────────────────────
-
-        public static void DoubleClick()
-        {
-            // Both clicks already fire on background threads via LeftClick()
-            LeftClick();
-            System.Threading.Tasks.Task.Run(async () =>
-            {
-                await System.Threading.Tasks.Task.Delay(24); // wait for first click + gap
-                LeftClick();
-            });
-        }
-
-        public static void TapKeyWithModifier(VirtualKey modifier, VirtualKey key)
-        {
-            if (modifier == VirtualKey.None) { TapKey(key); return; }
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                KeyDown(modifier);
-                System.Threading.Thread.Sleep(8);
-                KeyDown(key);
-                System.Threading.Thread.Sleep(8);
-                KeyUp(key);
-                System.Threading.Thread.Sleep(4);
-                KeyUp(modifier);
-            });
-        }
-
-        public static void TapKey(VirtualKey key)
-        {
-            if (key == VirtualKey.None) return;
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                KeyDown(key);
-                System.Threading.Thread.Sleep(8);
-                KeyUp(key);
-            });
-        }
-
-        public static void KeyDown(VirtualKey key)
-        {
-            if (key == VirtualKey.None) return;
-            var inputs = new INPUT[1];
-            inputs[0].type = 1; // Keyboard
-            inputs[0].Data.ki.wVk = (ushort)key;
-            inputs[0].Data.ki.wScan = (ushort)MapVirtualKey((uint)key, 0);
             
-            // Flag logic: ScanCode required for RO, Extended for keys like Insert/Del
-            uint flags = 0x0008; // KEYEVENTF_SCANCODE
-            if (IsExtendedKey(key)) flags |= 0x0001; // KEYEVENTF_EXTENDEDKEY
-
-            inputs[0].Data.ki.dwFlags = flags;
-            SendInput(1, inputs, InputSize);
-        }
-
-        public static void KeyUp(VirtualKey key)
-        {
-            if (key == VirtualKey.None) return;
-            var inputs = new INPUT[1];
-            inputs[0].type = 1;
-            inputs[0].Data.ki.wVk = (ushort)key;
-            inputs[0].Data.ki.wScan = (ushort)MapVirtualKey((uint)key, 0);
+            // Wenn der letzte Befehl noch hängt (z.B. durch Anti-Cheat blockiert), 
+            // überspringen wir diesen Frame, damit die App nicht einfriert.
+            if (_mouseMoveInFlight) return; 
             
-            uint flags = 0x0008 | 0x0002; // SCANCODE + KEYUP
-            if (IsExtendedKey(key)) flags |= 0x0001;
-
-            inputs[0].Data.ki.dwFlags = flags;
-            SendInput(1, inputs, InputSize);
+            _mouseMoveInFlight = true;
+            Task.Run(() => 
+            {
+                try 
+                {
+                    var i = new INPUT[1]; i[0].type = 0; i[0].Data.mi.dx = dx; i[0].Data.mi.dy = dy; i[0].Data.mi.dwFlags = 1; 
+                    SendInput(1, i, Size); 
+                } 
+                finally 
+                { 
+                    _mouseMoveInFlight = false; 
+                }
+            });
         }
 
-        private static bool IsExtendedKey(VirtualKey key)
+        public static async Task SendChatString(string text)
         {
-            ushort v = (ushort)key;
-            // Insert, Delete, Home, End, PageUp, PageDown, arrow keys
-            return v == 0x2D || v == 0x2E || (v >= 0x21 && v <= 0x28);
+            if (string.IsNullOrEmpty(text)) return;
+            TapKey(VirtualKey.Enter);
+            await Task.Delay(150);
+            var inputs = new INPUT[text.Length * 2];
+            for (int i = 0; i < text.Length; i++)
+            {
+                inputs[i * 2].type = 1;
+                inputs[i * 2].Data.ki.wVk    = 0;
+                inputs[i * 2].Data.ki.wScan  = (ushort)text[i];
+                inputs[i * 2].Data.ki.dwFlags = 0x0004; // KEYEVENTF_UNICODE
+                inputs[i * 2 + 1].type = 1;
+                inputs[i * 2 + 1].Data.ki.wVk    = 0;
+                inputs[i * 2 + 1].Data.ki.wScan  = (ushort)text[i];
+                inputs[i * 2 + 1].Data.ki.dwFlags = 0x0004 | 0x0002; // UNICODE | KEYUP
+            }
+            SendInput((uint)inputs.Length, inputs, Size);
+            await Task.Delay(100);
+            TapKey(VirtualKey.Enter);
         }
 
-        // ── Win32 API Structures ─────────────────────────────────────────────────
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct INPUT { public uint type; public InputUnion Data; }
-
-        [StructLayout(LayoutKind.Explicit)]
-        private struct InputUnion
-        {
-            [FieldOffset(0)] public MOUSEINPUT mi;
-            [FieldOffset(0)] public KEYBDINPUT ki;
+        public static void LeftClick() {
+            if (_leftClickInFlight) return;
+            _leftClickInFlight = true;
+            Task.Run(async () => { try { Mouse(2); await Task.Delay(ClickDelay); Mouse(4); } finally { _leftClickInFlight = false; } });
         }
+        
+        public static void RightClick() {
+            if (_rightClickInFlight) return;
+            _rightClickInFlight = true;
+            Task.Run(async () => { try { Mouse(8); await Task.Delay(ClickDelay); Mouse(16); } finally { _rightClickInFlight = false; } });
+        }
+        
+        public static void DoubleClick() => Task.Run(async () => { Mouse(2); await Task.Delay(ClickDelay); Mouse(4); await Task.Delay(25); Mouse(2); await Task.Delay(ClickDelay); Mouse(4); });
+        
+        public static void KeyDown(VirtualKey k) => Task.Run(() => Key(k, 8));
+        public static void KeyUp(VirtualKey k) => Task.Run(() => Key(k, 10));
+        
+        public static void TapKey(VirtualKey k) => Task.Run(async () => { Key(k, 8); await Task.Delay(KeyDelay); Key(k, 10); });
+        public static void TapKeyWithModifier(VirtualKey m, VirtualKey k) => Task.Run(async () => { Key(m, 8); await Task.Delay(ClickDelay); Key(k, 8); await Task.Delay(KeyDelay); Key(k, 10); await Task.Delay(ClickDelay); Key(m, 10); });
+        public static void PanicHeal(VirtualKey k) => Task.Run(async () => { for (int i = 0; i < 10; i++) { Key(k, 8); await Task.Delay(8); Key(k, 10); await Task.Delay(8); } });
+        public static void ScrollWheel(int d) { var i = new INPUT[1]; i[0].type = 0; i[0].Data.mi.dwFlags = 2048; i[0].Data.mi.mouseData = (uint)d; SendInput(1, i, Size); }
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MOUSEINPUT { public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
+        private static void Mouse(uint f) { var i = new INPUT[1]; i[0].type = 0; i[0].Data.mi.dwFlags = f; SendInput(1, i, Size); }
+        private static void Key(VirtualKey k, uint f) { var i = new INPUT[1]; i[0].type = 1; i[0].Data.ki.wVk = (ushort)k; i[0].Data.ki.wScan = (ushort)MapVirtualKey((uint)k, 0); if ((ushort)k >= 33 && (ushort)k <= 46) f |= 1; i[0].Data.ki.dwFlags = f; SendInput(1, i, Size); }
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
+        [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public InputUnion Data; }
+        [StructLayout(LayoutKind.Explicit)] struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+        [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
+        [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public IntPtr dwExtraInfo; }
     }
 
-    /// <summary>Complete enum of all required keys.</summary>
-    public enum VirtualKey : ushort
-    {
-        None = 0, Tab = 0x09, Escape = 0x1B, Space = 0x20, Enter = 0x0D, Insert = 0x2D, Delete = 0x2E,
-        A = 0x41, B = 0x42, C = 0x43, D = 0x44, E = 0x45, F = 0x46, G = 0x47, H = 0x48,
-        I = 0x49, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E, O = 0x4F, P = 0x50,
-        Q = 0x51, R = 0x52, S = 0x53, T = 0x54, U = 0x55, V = 0x56, W = 0x57, X = 0x58, Y = 0x59, Z = 0x5A,
-        F1 = 0x70, F2 = 0x71, F3 = 0x72, F4 = 0x73, F5 = 0x74, F6 = 0x75, F7 = 0x76, F8 = 0x77,
-        F9 = 0x78, F10 = 0x79, F11 = 0x7A, F12 = 0x7B,
-        Num1 = 0x31, Num2 = 0x32, Num3 = 0x33, Num4 = 0x34, Num5 = 0x35, Num6 = 0x36, Num7 = 0x37, Num8 = 0x38, Num9 = 0x39, Num0 = 0x30,
-        ControlLeft = 0xA2, AltLeft = 0xA4, ShiftLeft = 0xA0
-    }
+    public enum VirtualKey : ushort { None = 0, Tab = 9, Escape = 27, Space = 32, Enter = 13, Insert = 45, Delete = 46, A = 65, B = 66, C = 67, D = 68, E = 69, F = 70, G = 71, H = 72, I = 73, J = 74, K = 75, L = 76, M = 77, N = 78, O = 79, P = 80, Q = 81, R = 82, S = 83, T = 84, U = 85, V = 86, W = 87, X = 88, Y = 89, Z = 90, F1 = 112, F2 = 113, F3 = 114, F4 = 115, F5 = 116, F6 = 117, F7 = 118, F8 = 119, F9 = 120, F10 = 121, F11 = 122, F12 = 123, Num1 = 49, Num2 = 50, Num3 = 51, Num4 = 52, Num5 = 53, Num6 = 54, Num7 = 55, Num8 = 56, Num9 = 57, Num0 = 48, ControlLeft = 162, AltLeft = 164, ShiftLeft = 160 }
 }

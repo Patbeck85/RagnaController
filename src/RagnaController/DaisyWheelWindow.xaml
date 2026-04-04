@@ -1,0 +1,36 @@
+<Window x:Class="RagnaController.DaisyWheelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DaisyWheel" Width="560" Height="560"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" WindowStartupLocation="CenterScreen" ShowInTaskbar="False">
+    <Grid x:Name="RootGrid">
+        <Ellipse Width="520" Height="520" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#00000000" Offset="0.5"/>
+                    <GradientStop Color="#4DE5B842" Offset="0.75"/>
+                    <GradientStop Color="#80E5B842" Offset="0.88"/>
+                    <GradientStop Color="#00000000" Offset="1.0"/>
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+        </Ellipse>
+        <Canvas x:Name="WheelCanvas" Width="500" Height="500" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <Border Width="160" Height="160" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="80" Background="#E6080A0F" BorderBrush="#E5B842" BorderThickness="2">
+            <Border.Effect>
+                <DropShadowEffect Color="#E5B842" BlurRadius="25" ShadowDepth="0" Opacity="0.6"/>
+            </Border.Effect>
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="CurrentTextBlock" Text="" Foreground="#F0F4F8" FontSize="18" FontWeight="Black" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="140" TextAlignment="Center"/>
+                <TextBlock Text="▌" Foreground="#E5B842" FontSize="16" HorizontalAlignment="Center" Margin="0,4,0,0" Effect="{StaticResource NeonGlow}"/>
+            </StackPanel>
+        </Border>
+        <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,15">
+            <TextBlock Foreground="#A1B0C5" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center">
+                <Run Text="L3 = ⌫   R3 = Space   "/>
+                <Run Foreground="#3DDB6E" Text="Start = Send"/>
+                <Run Text="   B = Cancel"/>
+            </TextBlock>
+        </StackPanel>
+    </Grid>
+</Window>

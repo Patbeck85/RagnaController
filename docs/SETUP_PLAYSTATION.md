@@ -1,16 +1,18 @@
-# PlayStation Controller Setup
+# PlayStation Controller Setup (PS4 / PS5)
 
-RagnaController uses **XInput** — the same API as Xbox controllers.  
-PS4 and PS5 controllers speak their own protocol and need a translation layer.
+RagnaController uses **XInput** as its core input API — the same native API used by Xbox controllers.  
+Because Sony's PS4 (DualShock 4) and PS5 (DualSense) controllers use their own direct protocol, Windows does not natively translate their inputs to XInput out of the box.
+
+To use a PlayStation controller with RagnaController, you need a translation layer. The best and most stable tool for this is **DS4Windows**.
 
 ---
 
 ## Why DS4Windows?
 
-Sony controllers connect as a generic HID device, not as XInput.  
-DS4Windows runs in the background and presents the controller to Windows as a virtual Xbox pad.  
-RagnaController then receives full XInput data (sticks, triggers, buttons, battery level) and
-shows the correct **PS4** or **PS5** badge in the header.
+When you plug in a PlayStation controller, Windows recognizes it as a generic "HID (Human Interface Device)" gamepad, not as an XInput device.  
+DS4Windows runs silently in the background, grabs the Sony protocol, and presents the controller to Windows as a perfectly functioning virtual Xbox pad.
+
+*The magic part:* Even though DS4Windows disguises your controller as an Xbox pad, RagnaController has an advanced background hardware scanner (WMI query). It looks past the virtual Xbox pad, detects the real Sony hardware plugged into your USB port, and correctly displays the blue **PS4** or **PS5** badge and matching button prompts in the app!
 
 ---
 
@@ -18,95 +20,88 @@ shows the correct **PS4** or **PS5** badge in the header.
 
 ### 1. Download DS4Windows
 
-**Official site:** https://ds4-windows.com  
-Choose the latest release ZIP.
+**Official site:** [https://ds4-windows.com](https://ds4-windows.com)  
+Choose the latest release ZIP file.
 
-> ⚠ Avoid unofficial mirrors. The linked site is the current maintained fork.
+> ⚠ **Warning:** Only download from the official site. Avoid unofficial mirrors or older discontinued forks (like the original Jays2Kings version).
 
-### 2. Install
+### 2. Install and Run
 
-Extract the ZIP anywhere (e.g. `C:\Tools\DS4Windows\`).  
-No installer needed — it's portable.  
-On first launch it will prompt to install the **ViGEmBus driver** — click Yes. This is required.
+1. Extract the downloaded ZIP anywhere on your PC (e.g., `C:\Tools\DS4Windows\`).  
+2. DS4Windows is portable; there is no installer for the app itself. Just run `DS4Windows.exe`.
+3. On the very first launch, it will prompt you to install the **ViGEmBus driver**.  
+   👉 **Click Yes and install it.** This is the core driver that creates the virtual Xbox controller.
 
-### 3. Connect your controller
+### 3. Connect your Controller
 
-**USB:** Plug in with a USB-C (DualSense) or Micro-USB (DS4) cable.  
-**Bluetooth:** Hold PS + Share until the lightbar flashes, then pair in Windows Bluetooth settings.
+- **USB:** Plug it in using a USB-C (PS5) or Micro-USB (PS4) cable.  
+- **Bluetooth:** Hold the **PS Button + Share Button** until the lightbar starts flashing rapidly. Then pair it in your Windows Bluetooth settings.
 
-### 4. Enable XInput mode
+Once connected, the controller should appear in the "Controllers" tab of DS4Windows.
 
-In DS4Windows:
-1. Go to **Settings** tab
-2. Enable **"Hide DS4 Controller"** — this hides the raw Sony device and only exposes the virtual Xbox pad
-3. The controller should show a green checkmark in the Controllers tab
+### 4. CRITICAL: Enable "Hide DS4 Controller"
+
+This is the most important step for RagnaController to work without "Double Input" glitches:
+
+1. In DS4Windows, go to the **Settings** tab.
+2. Check the box for **"Hide DS4 Controller"**.
+3. *Why?* If this is off, Windows sees *two* controllers: the real PS4 pad and the virtual Xbox pad. This can cause RagnaController to receive double inputs or behave erratically. Hiding the real pad forces Windows to only see the clean, virtual XInput pad.
+
+*(Note: Depending on your Windows version, you might need to install a tool called "HidHide" if Windows refuses to hide the controller. DS4Windows will guide you if that happens).*
 
 ### 5. Launch RagnaController
 
-Start RagnaController **after** DS4Windows is running.  
-The badge in the header should show **PS4** (blue) or **PS5** (blue).
+Make sure DS4Windows is running and your controller is connected **before** starting RagnaController.
+
+Look at the top right header of the RagnaController window:
+- It should display a glowing blue badge saying **PS4** or **PS5**.
+- If it says **Xbox**, RagnaController couldn't read the physical USB port name, but the inputs will still work perfectly 1:1.
 
 ---
 
-## Auto-Start DS4Windows with Windows
+## Auto-Start DS4Windows with Windows (Recommended)
 
-1. Open DS4Windows → Settings → **"Start with Windows"**
-2. Or create a shortcut in `shell:startup` (`Win+R` → type `shell:startup`)
+To never worry about this again:
+1. Open DS4Windows → Go to **Settings**
+2. Check **"Run at Startup"**
+3. Check **"Start Minimized"**
 
-With Auto-Start enabled, DS4Windows is ready before you launch RagnaController.
+Now, whenever you turn on your PC and grab your controller, it will immediately work with RagnaController.
 
 ---
 
-## Troubleshooting
+## Troubleshooting FAQ
 
-| Problem | Fix |
+| Problem | Solution |
 |---|---|
-| Controller not detected in DS4Windows | Replug USB / re-pair Bluetooth · Try a different USB port |
-| ViGEmBus not installed | Reinstall DS4Windows, accept driver prompt |
-| Badge shows XBOX instead of PS4/PS5 | "Hide DS4 Controller" not enabled in DS4Windows |
-| Two controllers appear in Windows | "Hide DS4 Controller" is off — enable it |
-| Bluetooth keeps disconnecting | System power plan may suspend USB — set to High Performance |
-| DS4Windows crashes on start | Install [.NET 6 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/6.0) |
-| RagnaController shows NO CONTROLLER | Start DS4Windows before RagnaController |
-| Button mapping feels wrong | DS4Windows may be remapping buttons — use default profile in DS4Windows |
-| Battery not showing | Only visible over Bluetooth. USB always shows 🔌 WIRED |
-| DualSense adaptive triggers not working | Expected — XInput does not support DualSense haptic triggers |
+| **Controller not detected in DS4Windows** | Re-plug the USB cable, or unpair/re-pair via Bluetooth. Try a different USB port. |
+| **ViGEmBus not installed error** | Reinstall DS4Windows, make sure to accept the driver installation prompt at startup. |
+| **Badge shows XBOX instead of PS4/PS5** | This is purely cosmetic. It means Windows hid the hardware ID so well that RagnaController couldn't read the Sony brand. The controls will still work 100%. |
+| **RagnaController shows "NO CONTROLLER"** | Start DS4Windows *first*, wait for the controller to connect, and then start RagnaController. |
+| **Buttons fire twice / Controller goes crazy** | You forgot Step 4. Enable **"Hide DS4 Controller"** in the DS4Windows settings! |
+| **Battery always shows "🔌 WIRED"** | This is intentional. When connected via USB, the XInput API does not report a percentage, only that the device is receiving wired power. Connect via Bluetooth to see the percentage. |
+| **DualSense adaptive triggers aren't working** | Expected. The XInput API (which Ragnarok Online relies on) does not support PS5 haptic triggers. They will function as standard analog triggers. |
 
 ---
 
 ## Alternative Software
 
+If you do not want to use DS4Windows, here are alternative ways to get XInput from a PlayStation controller:
+
 | Tool | Notes |
 |---|---|
-| **Steam (Big Picture)** | Enable Steam Input for the controller, set to Xbox layout. Works but Steam must be running. |
-| **DsHidMini** | Driver-level HID-to-XInput bridge. Lighter than DS4Windows but no GUI. |
-| **Ryochan7 DS4Windows** | Older maintained fork — use official ds4-windows.com instead. |
+| **Steam (Big Picture)** | Add RagnaController as a "Non-Steam Game". Enable Steam Input for PlayStation controllers. Steam will translate the inputs. *Drawback: Steam must always run in the background.* |
+| **DsHidMini** | A driver-level HID-to-XInput bridge. Much lighter on system resources than DS4Windows, but it has no graphical user interface. For advanced users. |
 
 ---
 
-## Tested Configurations
+## Tested Configurations (v1.2.0)
 
-| Controller | Connection | DS4Windows version | Result |
+We have verified 100% compatibility with the following hardware running through DS4Windows:
+
+| Controller | Connection | DS4Windows | RagnaController Status |
 |---|---|---|---|
 | DualShock 4 v1 | USB | Latest | ✅ Full support |
 | DualShock 4 v2 | Bluetooth | Latest | ✅ Full support |
 | DualSense (PS5) | USB | Latest | ✅ Full support |
 | DualSense Edge | USB | Latest | ✅ Full support |
-
----
-
-## Technical Notes
-
-RagnaController detects PS controllers via WMI (`Win32_PnPEntity`) even when DS4Windows hides the raw device.  
-WMI lists both the hidden physical device (VID_054C) and the virtual Xbox device simultaneously,
-so brand detection works correctly.
-
-Sony VIDs and PIDs checked:
-
-| Device | VID | PID |
-|---|---|---|
-| DualSense | 054C | 0CE6 |
-| DualSense Edge | 054C | 0DF2 |
-| DualShock 4 v1 | 054C | 05C4 |
-| DualShock 4 v2 | 054C | 09CC |
-| DS4 Back Button | 054C | 0BA0 |

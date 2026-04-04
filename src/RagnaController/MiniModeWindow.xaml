@@ -1,76 +1,43 @@
 <Window x:Class="RagnaController.MiniModeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="RagnaController Mini"
-        Width="280" Height="120"
-        Background="{StaticResource BG1Brush}"
-        Foreground="{StaticResource TextHiBrush}"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Topmost="True"
-        ResizeMode="NoResize"
-        ShowInTaskbar="False"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown">
-
-    <Border BorderBrush="{StaticResource NeonBrush}" BorderThickness="1.5" CornerRadius="6"
-            Background="{StaticResource BG1Brush}">
+        Title="Mini" Width="260" Height="110"
+        Background="Transparent" WindowStyle="None" AllowsTransparency="True" Topmost="True"
+        WindowStartupLocation="CenterScreen"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        MouseRightButtonDown="Window_MouseRightButtonDown"
+        ToolTip="Right-click: toggle click-through (blue = active). Press Start+Back on controller to restore main window.">
+    <Border Background="#E6080A0F" BorderBrush="#E5B842" BorderThickness="1.5" CornerRadius="8">
+        <Border.Effect>
+            <DropShadowEffect Color="#E5B842" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
+        </Border.Effect>
         <Grid Margin="12">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-
-            <!-- Header -->
-            <Grid Grid.Row="0">
-                <StackPanel Orientation="Horizontal">
-                    <Ellipse x:Name="StatusDot" Width="8" Height="8" 
-                             VerticalAlignment="Center" Margin="0,0,6,0">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid>
+                <TextBlock x:Name="ProfileText" Text="NOVICE" Foreground="#E5B842" FontWeight="Black" FontSize="11"/>
+                <Button Content="✕" Click="BtnClose_Click" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Foreground="#A1B0C5" FontSize="12" FontWeight="Bold" Cursor="Hand"/>
+            </Grid>
+            <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Orientation="Horizontal">
+                <TextBlock x:Name="StateIcon" Text="▶" FontSize="26" FontWeight="Black" Margin="0,0,12,0">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush x:Name="StateIconBrush" Color="#3DDB6E"/>
+                    </TextBlock.Foreground>
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{Binding ElementName=StateIconBrush, Path=Color}" BlurRadius="10" ShadowDepth="0"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="StateText" Text="RUNNING" FontWeight="Black" FontSize="14">
+                        <TextBlock.Foreground>
+                            <SolidColorBrush x:Name="StateTextBrush" Color="#F0F4F8"/>
+                        </TextBlock.Foreground>
+                    </TextBlock>
+                    <Ellipse x:Name="StatusDot" Width="10" Height="10" HorizontalAlignment="Left" Margin="0,4,0,0">
                         <Ellipse.Fill>
-                            <SolidColorBrush x:Name="StatusColor" Color="#FF3A52"/>
+                            <SolidColorBrush x:Name="StatusBrush" Color="#3DDB6E"/>
                         </Ellipse.Fill>
                     </Ellipse>
-                    <TextBlock x:Name="ProfileText" Text="MELEE"
-                               FontSize="11" FontWeight="Bold"
-                               Foreground="{StaticResource NeonBrush}"
-                               VerticalAlignment="Center"/>
                 </StackPanel>
-
-                <!-- Close button -->
-                <Button Content="✕" Width="20" Height="20"
-                        HorizontalAlignment="Right"
-                        Style="{StaticResource ConsoleDangerBtn}"
-                        Padding="0" FontSize="10"
-                        Click="BtnClose_Click"/>
-            </Grid>
-
-            <!-- Status -->
-            <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,8">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <TextBlock x:Name="StateIcon" Text="▶"
-                               FontSize="16" Margin="0,0,8,0">
-                        <TextBlock.Foreground>
-                            <SolidColorBrush x:Name="StateIconColor" Color="#FF3A52"/>
-                        </TextBlock.Foreground>
-                    </TextBlock>
-                    <TextBlock x:Name="StateText" Text="IDLE"
-                               FontSize="13" FontWeight="Bold">
-                        <TextBlock.Foreground>
-                            <SolidColorBrush x:Name="StateTextColor" Color="#8B97CC"/>
-                        </TextBlock.Foreground>
-                    </TextBlock>
-                </StackPanel>
-
-                <TextBlock x:Name="HintText" Text="L3 = Toggle Mode"
-                           FontSize="9" Foreground="{StaticResource TextLowBrush}"
-                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
-            </StackPanel>
-
-            <!-- Footer -->
-            <StackPanel Grid.Row="2" Orientation="Horizontal"
-                        HorizontalAlignment="Center">
-                <TextBlock Text="Ctrl+F = Full Mode  ·  Ctrl+1-4 = Profile"
-                           FontSize="8" Foreground="{StaticResource TextLowBrush}"/>
             </StackPanel>
         </Grid>
     </Border>

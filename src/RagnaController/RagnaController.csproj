@@ -11,7 +11,7 @@
     <RootNamespace>RagnaController</RootNamespace>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Authors>RagnaController Contributors</Authors>
     <Description>Hybrid Action Controller Layer for Ragnarok Online</Description>
   </PropertyGroup>
@@ -46,7 +46,7 @@
   <ItemGroup>
     <None Include="startup_voice.mp3" CopyToOutputDirectory="PreserveNewest" Condition="Exists('startup_voice.mp3')" />
     <None Include="startup_voice.wav" CopyToOutputDirectory="PreserveNewest" Condition="Exists('startup_voice.wav')" />
-    <None Include="GetDotNet8.bat"   CopyToOutputDirectory="PreserveNewest"/>
+    <None Include="GetEmotes.ps1"    CopyToOutputDirectory="PreserveNewest"/>
     <None Include="GetDS4Windows.bat" CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
 
