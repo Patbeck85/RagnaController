@@ -1,8 +1,8 @@
-# RagnaController — Architecture
+# RagnaController — Architecture (v1.2.0)
 
 ## System Overview
 
-```
+```text
 EXE startup
     │
     └── App.xaml.cs: ShowSplashThenMain()
@@ -11,111 +11,95 @@ EXE startup
            │
            └── MainWindow
                   │
-                  ├── HybridEngine  ←──────────────── 125 Hz DispatcherTimer
+                  ├── HybridEngine  ←──────────────── 125 Hz DispatcherTimer (Priority: Input)
                   │     │
                   │     ├── ControllerService   (XInput poll + WMI detect)
-                  │     ├── MovementEngine      (left stick → SendInput click)
-                  │     ├── CursorEngine        (right stick → mouse move)
-                  │     ├── CombatEngine        (button map · turbo · macro)
+                  │     ├── MovementEngine      (Left stick → SendInput click)
+                  │     ├── CursorEngine        (Right stick → Mouse move)
+                  │     ├── CombatEngine        (Button mapping · Turbo · Macro)
+                  │     ├── ComboEngine         (Sequential Skill Chains & Timings)
                   │     ├── AutoTargetEngine    (Melee FSM)
                   │     ├── KiteEngine          (Ranged FSM)
                   │     ├── MageEngine          (Mage FSM)
                   │     ├── SupportEngine       (Support FSM)
-                  │     ├── FeedbackSystem      (rumble + SystemSounds)
-                  │     └── AdvancedLogger      (tick metrics + file log)
+                  │     ├── FeedbackSystem      (Rumble + SystemSounds)
+                  │     └── AdvancedLogger      (Tick metrics + File log)
                   │
                   ├── Global hotkeys   (Win32 RegisterHotKey / WM_HOTKEY)
-                  ├── System tray      (WinForms NotifyIcon)
-                  ├── ProfileManager   (39 built-ins + user JSON)
-                  └── Settings         (JSON in %AppData%)
-```
-
----
-
-## Tick Loop (HybridEngine.OnTick — 8 ms)
-
-```
-1.  ControllerService.GetGamepad()         ← SharpDX XInput poll
-2.  If no gamepad → reconnect counter      ← tries DetectController() every ~2 s
-3.  Battery check every ~10 s              → BatteryChanged event → header icon
-4.  Read modifier flags L1/R1/L2/R2
-5.  Left stick → MovementEngine.Update()
-6.  X button (no modifier) → Alt hold/release (SendInput KeyDown/KeyUp)
-7.  R3 (no special engine) → InputSimulator.DoubleClick()
-8.  SELECT → toggle PrecisionMode on CursorEngine
-9.  START + D-Pad → ProfileQuickSwitch event (+1 / -1)
-10. Right stick → active special engine OR CursorEngine.Update()
-11. AutoTargetEngine.Update()  (only when no Kite/Mage/Support active)
-12. CombatEngine.UpdateMacroPlayback()
-13. CombatEngine.ProcessButton() for each changed button flag
-14. SnapshotUpdated event → MainWindow UI update (via Dispatcher.Invoke)
-```
-
----
-
-## Input Layer Resolution (CombatEngine)
-
-```
+                  ├── RadialMenuWindow (Built-in high-res Emotes & Item Wheel)
+                  ├── DaisyWheelWindow (Circular On-Screen Keyboard)
+                  ├── ProfileManager   (39 built-ins + user JSON overrides)
+                  └── Settings         (JSON stored in %AppData%)
+Tick Loop (HybridEngine.OnTick — 8 ms)
+The entire input loop is wrapped in a secure try-catch block to prevent Windows, broken USB packets, or Anti-Cheat software from crashing the application.
+code
+Text
+1.  ControllerService.GetGamepad()         ← SharpDX XInput poll.
+2.  Hardware Sanity Check                  ← Drop frame if impossible inputs detected (e.g., Up+Down).
+3.  If no gamepad → AutoStop()             ← Shuts down engines safely, waits for reconnection.
+4.  Battery Check                          ← Fires every ~10s. Reports "WIRED" for USB connections.
+5.  Read Modifier Flags                    ← Evaluates L1, R1, L2, R2 states.
+6.  Pro Shortcuts                          ← Checks for Loot Vacuum (L1+R1), Panic Heal (L3+R3).
+7.  Overlay Triggers                       ← Checks for Daisy Wheel (Back+R1) or Radial Menu (L2+R2).
+8.  Left Stick                             ← Passed to MovementEngine.Update().
+9.  Right Stick                            ← Passed to active special engine OR CursorEngine.Update().
+10. AutoTargetEngine.Update()              ← Evaluates tab-targeting and auto-attacks.
+11. CombatEngine.ProcessButton()           ← Resolves 5-layer mappings for pushed face buttons.
+12. UI Update                              ← UI Snapshot updated every 4th tick (~30 FPS) to prevent WPF UI freezes.
+Asynchronous Anti-Freeze Input Pipeline (InputSimulator.cs)
+To prevent user32.dll SendInput from freezing the 125Hz Tick Loop when Anti-Cheat systems (like Gepard Shield) or Windows User Interface Privilege Isolation (UIPI) hook into Windows APIs, all physical outputs are detached into background tasks.
+code
+C#
+// Example from InputSimulator.cs
+public static void MoveMouseRelative(int dx, int dy) 
+{ 
+    // Frame-Drop Logic: If the previous command is still blocked by the OS, 
+    // skip this frame to keep the Controller Tick Loop alive and responsive.
+    if (_mouseMoveInFlight) return; 
+    
+    _mouseMoveInFlight = true;
+    Task.Run(() => 
+    {
+        try { SendInput(...); } finally { _mouseMoveInFlight = false; }
+    });
+}
+Input Layer Resolution (CombatEngine.cs)
+Inputs are resolved sequentially based on active modifier holds:
+code
+Text
 Button pressed
     │
-    ├─ L1 held? → look up "L1+{button}" in profile.ButtonMappings
-    ├─ R1 held? → look up "R1+{button}"
-    ├─ L2 held? → look up "L2+{button}"
-    ├─ R2 held? → look up "R2+{button}"
-    └─ none     → look up "{button}"          ← base layer
+    ├─ L1 held? → Look up "L1+{button}" in profile.ButtonMappings
+    ├─ R1 held? → Look up "R1+{button}"
+    ├─ L2 held? → Look up "L2+{button}"
+    ├─ R2 held? → Look up "R2+{button}"
+    └─ none     → Look up "{button}"          ← Base layer
 
-Special base-layer overrides (handled before CombatEngine):
-    X (no modifier) = Alt hold       — not in ButtonMappings
-    R3 (no modifier) = DoubleClick   — not in ButtonMappings
-```
-
----
-
-## Engine Activation Rules
-
-```
-L3 press
+Special Base-Layer Overrides (Handled before CombatEngine):
+    X (no modifier) = Alt hold       — Toggles ground items
+    R3 (no modifier) = DoubleClick   — Suppressed if Mage/Support active
+    START + D-Pad = Profile Switch   — Shifts profile index +1 / -1
+Engine Activation Rules
+code
+Text
+L3 (Left Stick Click) Pressed
     │
     ├─ SupportEnabled && !support.IsActive  → ToggleSupportMode()
     ├─ MageEnabled    && !mage.IsActive     → ToggleMageMode()
     ├─ KiteEnabled    && !kite.IsActive     → ToggleKiteMode()
     └─ else                                 → ToggleAutoTarget()
 
-Cursor ownership:
-    Support.IsActive  → right stick owned by SupportEngine
-    Mage.IsActive     → right stick owned by MageEngine
-    Kite.IsActive     → right stick owned by KiteEngine
-    AutoTarget active → right stick shared (aim + auto-attack)
-    none              → right stick → CursorEngine (free cursor)
-```
-
----
-
-## Input Flow
-
-```
-Physical controller button press
-    ↓
-Windows XInput driver
-    ↓
-SharpDX.XInput (GetState)
-    ↓
-HybridEngine.OnTick()
-    ↓
-CombatEngine / MovementEngine / CursorEngine / special FSM
-    ↓
-InputSimulator (P/Invoke user32.dll SendInput)
-    ↓
-Windows input queue
-    ↓
-Ragnarok Online process
-```
-
----
-
-## Controller Detection Flow
-
-```
+Right Stick Ownership:
+    Support.IsActive  → Owned by SupportEngine (Ally aiming)
+    Mage.IsActive     → Owned by MageEngine (Ground spell targeting)
+    Kite.IsActive     → Owned by KiteEngine (Retreat calculations)
+    Radial is Open    → Owned by RadialMenu (Sector highlighting)
+    AutoTarget active → Shared (Directional Snap Aim)
+    none              → Owned by CursorEngine (Free mouse movement)
+Controller Detection Flow (ControllerService.cs)
+To accurately display the brand badge (Xbox vs PlayStation) despite wrapper tools like DS4Windows masking the input protocol, RagnaController uses a WMI hardware query.
+code
+Text
 ControllerService.DetectController()
     │
     └── Try XInput slots 0–3
@@ -124,71 +108,25 @@ ControllerService.DetectController()
                   │
                   └── DetectControllerType() ← WMI query Win32_PnPEntity
                          │
-                         ├── Name/HardwareID contains VID_054C + PID_0CE6/0DF2 → "PS5"
-                         ├── Name/HardwareID contains VID_054C + PID_05C4/09CC → "PS4"
-                         ├── VID_057E + PID_2009                                → "Switch"
-                         ├── VID_2DC8                                           → "8BitDo"
-                         ├── VID_046D + PID_C21D/C21F/C218                     → "Logitech"
-                         ├── VID_1532                                           → "Razer"
-                         ├── VID_044F                                           → "Thrustmaster"
-                         └── fallback                                           → "Xbox"
-```
-
----
-
-## Profile Storage
-
-| Type | Location | Notes |
-|---|---|---|
-| Built-in profiles | Compiled into exe (`ProfileManager.cs`) | 39 classes, read-only |
-| User overrides | `%AppData%\RagnaController\Profiles\*.json` | Saved when user edits |
-| Macros | `%AppData%\RagnaController\Macros\*.json` | Saved by MacroRecorder |
-| Settings | `%AppData%\RagnaController\settings.json` | Saved on every change |
-| Session logs | `%LocalAppData%\RagnaController\Logs\` | Written during session |
-
----
-
-## Startup Sequence
-
-```
-1. App.OnStartup()        ← runtime version check (.NET 8+)
-2. ShowSplashThenMain()   ← async: splash shown immediately
-3. Task.Delay(3000)       ← 3-second display
-4. splash.FadeAndClose()  ← 300 ms fade-out, then Close()
-5. new MainWindow()
-      ├── InitializeComponent()
-      ├── SourceInitialized → RegisterGlobalHotkeys()
+                         ├── Contains VID_054C + PID_0CE6/0DF2 → "PS5"
+                         ├── Contains VID_054C + PID_05C4/09CC → "PS4"
+                         ├── Contains VID_057E + PID_2009      → "Switch"
+                         ├── Contains VID_2DC8                 → "8BitDo"
+                         ├── Contains VID_046D                 → "Logitech"
+                         └── fallback                          → "Xbox"
+Startup Sequence (App.xaml.cs & MainWindow.xaml.cs)
+code
+Text
+1. App.OnStartup()        ← Global exception handlers attached.
+2. StartWorkflow()        ← Async startup wrapper.
+3. SplashWindow.Show()    ← 3-second visual display.
+4. Voice Synthesis        ← Triggers "Ragna Controller" voice greeting.
+5. MainWindow.Init()
+      ├── RegisterGlobalHotkeys()
       ├── SubscribeEngineEvents()
       ├── PopulateProfiles()
-      ├── SelectLastProfile()
       ├── ApplySettings()
-      ├── InitTrayIcon()
-      ├── RestoreWindowPosition()
       ├── if AutoStart → _engine.Start()
       ├── if StartInMiniMode → SwitchToMiniMode()
-      └── CheckForUpdatesAsync() (after 3 s delay)
-```
-
----
-
-## Key Files
-
-| File | Responsibility |
-|---|---|
-| `App.xaml.cs` | Startup, splash, runtime check |
-| `SplashWindow.xaml.cs` | Animated intro, FadeAndClose() |
-| `MainWindow.xaml.cs` | Main UI, tray icon, global hotkeys, engine wiring |
-| `Core/HybridEngine.cs` | 125 Hz tick loop, event bus, engine orchestration |
-| `Core/CombatEngine.cs` | Button mapping, 5 layers, turbo, macro playback |
-| `Core/AutoTargetEngine.cs` | Melee tab+attack FSM |
-| `Core/KiteEngine.cs` | Ranged 5-phase kite FSM |
-| `Core/MageEngine.cs` | Ground-target / bolt mode FSM |
-| `Core/SupportEngine.cs` | Heal / party cycle / ground mode FSM |
-| `Core/MacroRecorder.cs` | Record, playback, JSON save/load, AppData storage |
-| `Core/InputSimulator.cs` | SendInput P/Invoke (keyboard + mouse) |
-| `Core/FeedbackSystem.cs` | Rumble + SystemSounds, per-event patterns |
-| `Core/AdvancedLogger.cs` | Tick metrics, session log, export |
-| `Core/UpdateChecker.cs` | GitHub releases API check |
-| `Controller/ControllerService.cs` | XInput poll, 8-brand WMI detection, battery |
-| `Profiles/ProfileManager.cs` | 39 built-in profiles + user JSON load/save |
-| `Models/Settings.cs` | App settings with JSON persistence |
+      └── CheckForUpdatesAsync() (Fires silently in background)
+6. Splash.FadeAndClose()  ← Graceful transition to MainWindow.
