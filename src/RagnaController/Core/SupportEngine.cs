@@ -94,7 +94,11 @@ namespace RagnaController.Core
 
             if (Phase == SupportPhase.Healing && _healCooldown <= 0) SetPhase(SupportPhase.TargetingParty);
             else if (Phase == SupportPhase.AutoCycling && _tabCooldown <= 0) SetPhase(SupportPhase.TargetingParty);
-            else if (Phase == SupportPhase.SelfHealing || Phase == SupportPhase.Rezzing || Phase == SupportPhase.PlacingSanctuary) SetPhase(SupportPhase.TargetingParty);
+            // Use _healCooldown as a display timer for instant-action phases so the label
+            // remains visible for ~500ms instead of clearing after a single 8ms tick
+            else if ((Phase == SupportPhase.SelfHealing || Phase == SupportPhase.Rezzing
+                   || Phase == SupportPhase.PlacingSanctuary) && _healCooldown <= 0)
+                SetPhase(SupportPhase.TargetingParty);
         }
 
         public void CastRezz() { InputSimulator.TapKey((VirtualKey)RezzKeyVK); RezzCount++; SetPhase(SupportPhase.Rezzing); }
@@ -102,7 +106,10 @@ namespace RagnaController.Core
         private void SetPhase(SupportPhase p)
         {
             Phase = p;
-            if (p == SupportPhase.Healing) _healCooldown = 500;
+            // Healing has its own 500ms cooldown; instant-action phases get a display timer too
+            if (p == SupportPhase.Healing || p == SupportPhase.SelfHealing
+             || p == SupportPhase.Rezzing || p == SupportPhase.PlacingSanctuary)
+                _healCooldown = 500;
             PhaseChanged?.Invoke(p);
         }
     }

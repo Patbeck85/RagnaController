@@ -10,6 +10,10 @@ namespace RagnaController
     {
         protected override void OnStartup(StartupEventArgs e)
         {
+            // PerMonitorV2 DPI awareness — must be set before any window is created.
+            // Ensures GetCursorPos, SendInput and WindowTracker all use physical pixels.
+            System.Windows.Forms.Application.SetHighDpiMode(System.Windows.Forms.HighDpiMode.PerMonitorV2);
+
             AppDomain.CurrentDomain.UnhandledException += (s, ex) =>
                 LogFatal(ex.ExceptionObject?.ToString() ?? "Unknown unhandled exception");
             DispatcherUnhandledException += (s, ex) =>

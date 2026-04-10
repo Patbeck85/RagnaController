@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -86,8 +87,22 @@ namespace RagnaController
 
         private void Finish()
         {
+            string name = ProfileNameText.Text.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                MessageBox.Show("Please enter a profile name.", "Name required", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            // Strip characters illegal in Windows file names (SafeName logic)
+            string safeName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+            if (string.IsNullOrWhiteSpace(safeName))
+            {
+                MessageBox.Show("Profile name contains only invalid characters.\nUse letters, numbers or spaces.", "Invalid Name", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             CreatedProfile = new Profile {
-                Name = ProfileNameText.Text,
+                Name = safeName,
                 Class = (ClassCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Melee",
                 AutoAttackEnabled = EnableMeleeCheck.IsChecked == true,
                 KiteEnabled = EnableKiteCheck.IsChecked == true,

@@ -29,25 +29,10 @@ namespace RagnaController
         // Click-Through umschalten (Rechtsklick auf X-Button)
         private void BtnClose_Click(object sender, RoutedEventArgs e)
         {
-            // FIX: Sichere Methode, um das MainWindow zu finden, das dieses Mini-Fenster geöffnet hat.
-            if (this.Owner is MainWindow mainOwner)
-            {
-                mainOwner.SwitchFromMiniMode();
-            }
+            if (Application.Current.MainWindow is MainWindow main)
+                main.SwitchFromMiniMode();
             else
-            {
-                // Fallback, falls der Owner aus irgendeinem Grund verloren ging
-                foreach (Window window in Application.Current.Windows)
-                {
-                    if (window is MainWindow mainWindow)
-                    {
-                        mainWindow.SwitchFromMiniMode();
-                        return;
-                    }
-                }
-                // Absoluter Notfall-Fallback
                 Close();
-            }
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

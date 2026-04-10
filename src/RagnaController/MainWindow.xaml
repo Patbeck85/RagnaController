@@ -25,8 +25,9 @@
                 <RowDefinition Height="60"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="40"/>
+                <RowDefinition Height="40"/>
             </Grid.RowDefinitions>
-            <!-- 0. ADMIN WARNING BANNER -->
+            <!-- 0. ADMIN WARNING BANNER (collapsed when running as admin) -->
             <Border x:Name="AdminWarningBanner" Grid.Row="0" Background="#7A3A00" Visibility="Collapsed" Padding="15,6">
                 <Grid>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -41,13 +42,14 @@
                 </Grid>
             </Border>
 
-            <!-- 1. HEADER -->
+            <!-- 1. HEADER (mit Profilauswahl) -->
             <Border Grid.Row="1" BorderBrush="#2A3245" BorderThickness="0,0,0,1">
                 <Grid Margin="20,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="⚔ RAGNA" FontWeight="Black" FontSize="18" Foreground="#F0F4F8" VerticalAlignment="Center"/>
                         <TextBlock Text="CONTROLLER" FontWeight="Light" FontSize="18" Foreground="{StaticResource GoldBrush}" VerticalAlignment="Center" Margin="5,0,20,0" Effect="{StaticResource NeonGlow}"/>
 
+                        <!-- Profilauswahl direkt im Header -->
                         <ComboBox x:Name="ProfileCombo" Width="230" Height="32" Style="{StaticResource DarkComboBox}" SelectionChanged="ProfileCombo_SelectionChanged" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0">
                             <ComboBox.ToolTip><ToolTip Content="Active profile — applied immediately"/></ComboBox.ToolTip>
                             <ComboBox.ItemTemplate>
@@ -56,7 +58,7 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        
+                        <!-- Klassen-Badge -->
                         <Border x:Name="ClassBadge" Background="#1A2030" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="4" Padding="8,3" Margin="0,0,10,0" VerticalAlignment="Center">
                             <TextBlock x:Name="ClassBadgeText" Text="⚔ –" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold"/>
                         </Border>
@@ -89,8 +91,9 @@
                 </Grid>
             </Border>
 
-            <!-- 2. TOOLBAR -->
+            <!-- 2. TOOLBAR (status left, action buttons right) -->
             <Grid Grid.Row="2" Margin="20,0">
+                <!-- Left: Status + Pause -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <Border Background="#1A2030" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="6" Padding="15,0" Height="36" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -98,37 +101,44 @@
                             <TextBlock x:Name="AutoStatusText" Text="Waiting for Controller…" Foreground="#A1B0C5" FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
-                    <Button x:Name="BtnPause" Click="BtnPause_Click" Width="100" Height="36" Margin="15,0,0,0" Style="{StaticResource ConsoleGhostBtn}" FontWeight="Bold" IsEnabled="False"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M5 2V14M11 2V14" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Pause" VerticalAlignment="Center"/></StackPanel></Button>
+                    <Button x:Name="BtnPause" Click="BtnPause_Click" Width="100" Height="36" Margin="15,0,0,0" Style="{StaticResource ConsoleGhostBtn}" FontWeight="Bold" IsEnabled="False"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path x:Name="BtnPauseIcon" Data="M5 2V14M11 2V14" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock x:Name="BtnPauseLabel" Text="Pause" VerticalAlignment="Center"/></StackPanel></Button>
                 </StackPanel>
+                <!-- Right: Action buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Button Click="BtnRemap_Click" Width="85" Height="36" Margin="0,0,6,0" Style="{StaticResource ConsoleGhostBtn}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M2 6C2 4.34 3.34 3 5 3H11C12.66 3 14 4.34 14 6V10C14 11.66 12.66 13 11 13H5C3.34 13 2 11.66 2 10ZM5 7V9M4 8H6M10.5 8.5A0.5 0.5 0 1 0 11.5 8.5A0.5 0.5 0 0 0 10.5 8.5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Remap" VerticalAlignment="Center"/></StackPanel>
+                        <Button.ToolTip><ToolTip Content="Map controller buttons to keyboard keys (5 layers)"/></Button.ToolTip>
                     </Button>
                     <Button Click="BtnMacro_Click" Width="80" Height="36" Margin="0,0,6,0" Style="{StaticResource ConsoleGhostBtn}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M8 3A5 5 0 1 0 8 13A5 5 0 0 0 8 3ZM8 6A2 2 0 1 0 8 10A2 2 0 0 0 8 6Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Macro" VerticalAlignment="Center"/></StackPanel>
+                        <Button.ToolTip><ToolTip Content="Record and manage macros"/></Button.ToolTip>
                     </Button>
                     <Button Click="BtnRadial_Click" Width="80" Height="36" Margin="0,0,6,0" Style="{StaticResource ConsoleGhostBtn}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M8 1V4M8 12V15M1 8H4M12 8H15M8 5A3 3 0 1 0 8 11A3 3 0 0 0 8 5Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Radial" VerticalAlignment="Center"/></StackPanel>
+                        <Button.ToolTip><ToolTip Content="Configure radial emote menu (hold LT+RT in game)"/></Button.ToolTip>
                     </Button>
                     <Button Click="BtnCombo_Click" Width="80" Height="36" Margin="0,0,6,0" Style="{StaticResource ConsoleGhostBtn}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M9 1L3.5 9H8L7 15L12.5 7H8Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Stretch="Uniform"/></Viewbox><TextBlock Text="Combo" VerticalAlignment="Center"/></StackPanel>
+                        <Button.ToolTip><ToolTip Content="Edit class combo chain sequence"/></Button.ToolTip>
                     </Button>
                     <Button Click="BtnLibrary_Click" Width="85" Height="36" Margin="0,0,6,0" Style="{StaticResource ConsoleGhostBtn}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M3 2H7V13H3ZM9 2H13V13H9ZM4 5H6M10 5H12M4 8H6M10 8H12" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Library" VerticalAlignment="Center"/></StackPanel>
+                        <Button.ToolTip><ToolTip Content="Profile library — manage all saved profiles"/></Button.ToolTip>
                     </Button>
                     <Button Click="BtnWizard_Click" Width="80" Height="36" Margin="0,0,6,0" Style="{StaticResource ConsoleGhostBtn}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M2 14L9 7M7 5L11 1M9 3L13 7M3 4L5 4M4 3V5M12 10L14 10M13 9V11" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Wizard" VerticalAlignment="Center"/></StackPanel>
+                        <Button.ToolTip><ToolTip Content="Create a new profile using the guided wizard"/></Button.ToolTip>
                     </Button>
                     <Button Click="BtnSettings_Click" Width="85" Height="36" Margin="0,0,15,0" Style="{StaticResource ConsoleGhostBtn}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M8 5.5A2.5 2.5 0 1 0 8 10.5A2.5 2.5 0 0 0 8 5.5ZM8 2V3.5M8 12.5V14M2 8H3.5M12.5 8H14M3.52 3.52L4.58 4.58M11.42 11.42L12.48 12.48M12.48 3.52L11.42 4.58M4.58 11.42L3.52 12.48" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Config" VerticalAlignment="Center"/></StackPanel>
+                        <Button.ToolTip><ToolTip Content="General settings (sound, rumble, window mode)"/></Button.ToolTip>
                     </Button>
                     <Button Click="BtnMini_Click" Width="60" Height="36" Style="{StaticResource ConsoleGhostBtn}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M2 2H14V14H2ZM2 2L6 6M10 10L14 14M6 6H10V10" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Mini" VerticalAlignment="Center"/></StackPanel>
+                        <Button.ToolTip><ToolTip Content="Mini mode: compact click-through overlay over RO"/></Button.ToolTip>
                     </Button>
                 </StackPanel>
             </Grid>
-
-            <!-- 3. MAIN CONTENT -->
             <Grid Grid.Row="3" Margin="20,10,20,15">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="260"/>
@@ -149,7 +159,11 @@
                                     <TextBlock Text="L-STICK" FontSize="10" FontWeight="Bold" Foreground="#7D8B9E" Margin="0,0,0,8" HorizontalAlignment="Center"/>
                                     <Grid Width="50" Height="50">
                                         <Ellipse Fill="#080A0F" Stroke="#2A3245" StrokeThickness="2"/>
-                                        <Ellipse x:Name="LeftDeadzoneRing" Width="10" Height="10" Fill="#33FF3A52" Stroke="#FF3A52" StrokeThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7"/>
+                                        <!-- Deadzone ring — size driven from code-behind -->
+                                        <Ellipse x:Name="LeftDeadzoneRing" Width="10" Height="10"
+                                                 Fill="#33FF3A52" Stroke="#FF3A52" StrokeThickness="1"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                 Opacity="0.7"/>
                                         <Canvas Width="50" Height="50">
                                             <Ellipse x:Name="LeftStickDot" Width="10" Height="10" Fill="{StaticResource GoldBrush}" Canvas.Left="20" Canvas.Top="20" Effect="{StaticResource NeonGlow}"/>
                                         </Canvas>
@@ -159,7 +173,10 @@
                                     <TextBlock Text="R-STICK" FontSize="10" FontWeight="Bold" Foreground="#7D8B9E" Margin="0,0,0,8" HorizontalAlignment="Center"/>
                                     <Grid Width="50" Height="50">
                                         <Ellipse Fill="#080A0F" Stroke="#2A3245" StrokeThickness="2"/>
-                                        <Ellipse x:Name="RightDeadzoneRing" Width="10" Height="10" Fill="#33FF3A52" Stroke="#FF3A52" StrokeThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7"/>
+                                        <Ellipse x:Name="RightDeadzoneRing" Width="10" Height="10"
+                                                 Fill="#33FF3A52" Stroke="#FF3A52" StrokeThickness="1"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                 Opacity="0.7"/>
                                         <Canvas Width="50" Height="50">
                                             <Ellipse x:Name="RightStickDot" Width="10" Height="10" Fill="#3A8EFF" Canvas.Left="20" Canvas.Top="20">
                                                 <Ellipse.Effect><DropShadowEffect Color="#3A8EFF" BlurRadius="10" ShadowDepth="0"/></Ellipse.Effect>
@@ -168,19 +185,54 @@
                                     </Grid>
                                 </StackPanel>
                             </Grid>
-                            
-                            <Grid Margin="0,0,0,2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/></Grid.ColumnDefinitions><TextBlock Text="STICK DEADZONE" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Cursor="Hand" MouseLeftButtonDown="DeadzoneLabel_DblClick" VerticalAlignment="Center"/><Button Grid.Column="1" Content="↺" Click="DeadzoneReset_Click" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#3A4560" FontSize="11" Cursor="Hand" MouseEnter="ResetBtn_MouseEnter" MouseLeave="ResetBtn_MouseLeave"/></Grid>
-                            <Grid Margin="0,4,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="50"/></Grid.ColumnDefinitions><Slider x:Name="DeadzoneSlider" Minimum="0" Maximum="0.5" Value="0.2" ValueChanged="DeadzoneSlider_ValueChanged" VerticalAlignment="Center"/><TextBlock Grid.Column="1" x:Name="DeadzoneValue" Text="0.2" Style="{StaticResource SliderValue}" HorizontalAlignment="Right"/></Grid>
-                            
-                            <Grid Margin="0,0,0,2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/></Grid.ColumnDefinitions><TextBlock Text="MOVEMENT CURVE" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Cursor="Hand" MouseLeftButtonDown="CurveLabel_DblClick" VerticalAlignment="Center"/><Button Grid.Column="1" Content="↺" Click="CurveReset_Click" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#3A4560" FontSize="11" Cursor="Hand" MouseEnter="ResetBtn_MouseEnter" MouseLeave="ResetBtn_MouseLeave"/></Grid>
-                            <Grid Margin="0,4,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="50"/></Grid.ColumnDefinitions><Slider x:Name="CurveSlider" Minimum="1" Maximum="3" Value="1.5" ValueChanged="CurveSlider_ValueChanged" VerticalAlignment="Center"/><TextBlock Grid.Column="1" x:Name="CurveValue" Text="1.5" Style="{StaticResource SliderValue}" HorizontalAlignment="Right"/></Grid>
-                            
-                            <Grid Margin="0,0,0,2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/></Grid.ColumnDefinitions><TextBlock Text="ACTION SPEED (LEASH)" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Cursor="Hand" MouseLeftButtonDown="ActionSpeedLabel_DblClick" VerticalAlignment="Center"/><Button Grid.Column="1" Content="↺" Click="ActionSpeedReset_Click" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#3A4560" FontSize="11" Cursor="Hand" MouseEnter="ResetBtn_MouseEnter" MouseLeave="ResetBtn_MouseLeave"/></Grid>
-                            <Grid Margin="0,4,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="50"/></Grid.ColumnDefinitions><Slider x:Name="ActionSpeedSlider" Minimum="1" Maximum="10" Value="5" ValueChanged="ActionSpeedSlider_ValueChanged" VerticalAlignment="Center"/><TextBlock Grid.Column="1" x:Name="ActionSpeedValue" Text="5" Style="{StaticResource SliderValue}" HorizontalAlignment="Right"/></Grid>
-                            
-                            <Grid Margin="0,0,0,2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/></Grid.ColumnDefinitions><TextBlock Text="CURSOR SPEED" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Cursor="Hand" MouseLeftButtonDown="SensitivityLabel_DblClick" VerticalAlignment="Center"/><Button Grid.Column="1" Content="↺" Click="SensitivityReset_Click" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#3A4560" FontSize="11" Cursor="Hand" MouseEnter="ResetBtn_MouseEnter" MouseLeave="ResetBtn_MouseLeave"/></Grid>
-                            <Grid Margin="0,4,0,16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="50"/></Grid.ColumnDefinitions><Slider x:Name="SensitivitySlider" Minimum="400" Maximum="1800" Value="1200" ValueChanged="SensitivitySlider_ValueChanged" VerticalAlignment="Center"/><TextBlock Grid.Column="1" x:Name="SensitivityValue" Text="1200" Style="{StaticResource SliderValue}" HorizontalAlignment="Right"/></Grid>
-                            
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="STICK DEADZONE" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Cursor="Hand" MouseLeftButtonDown="DeadzoneLabel_DblClick" VerticalAlignment="Center">
+                                    <TextBlock.ToolTip><ToolTip Content="Dead zone in stick center. Recommended: 0.10–0.20 · ↺ Reset"/></TextBlock.ToolTip>
+                                </TextBlock>
+                                <Button Grid.Column="1" Content="↺" Click="DeadzoneReset_Click" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#3A4560" FontSize="11" Cursor="Hand" ToolTip="Reset to default" MouseEnter="ResetBtn_MouseEnter" MouseLeave="ResetBtn_MouseLeave"/>
+                            </Grid>
+                            <Grid Margin="0,4,0,12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="50"/></Grid.ColumnDefinitions>
+                                <Slider x:Name="DeadzoneSlider" Minimum="0" Maximum="0.5" Value="0.2" ValueChanged="DeadzoneSlider_ValueChanged" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="DeadzoneValue" Text="0.2" Style="{StaticResource SliderValue}" HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="MOVEMENT CURVE" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Cursor="Hand" MouseLeftButtonDown="CurveLabel_DblClick" VerticalAlignment="Center">
+                                    <TextBlock.ToolTip><ToolTip Content="Acceleration curve. 1.0=linear, 2.0=console-style. Recommended: 1.5 · ↺ Reset"/></TextBlock.ToolTip>
+                                </TextBlock>
+                                <Button Grid.Column="1" Content="↺" Click="CurveReset_Click" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#3A4560" FontSize="11" Cursor="Hand" ToolTip="Reset to default" MouseEnter="ResetBtn_MouseEnter" MouseLeave="ResetBtn_MouseLeave"/>
+                            </Grid>
+                            <Grid Margin="0,4,0,12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="50"/></Grid.ColumnDefinitions>
+                                <Slider x:Name="CurveSlider" Minimum="1" Maximum="3" Value="1.5" ValueChanged="CurveSlider_ValueChanged" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="CurveValue" Text="1.5" Style="{StaticResource SliderValue}" HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="ACTION SPEED (LEASH)" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Cursor="Hand" MouseLeftButtonDown="ActionSpeedLabel_DblClick" VerticalAlignment="Center">
+                                    <TextBlock.ToolTip><ToolTip Content="Cursor distance from character. Low=dungeon, High=open map. Recommended: 4–6 · ↺ Reset"/></TextBlock.ToolTip>
+                                </TextBlock>
+                                <Button Grid.Column="1" Content="↺" Click="ActionSpeedReset_Click" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#3A4560" FontSize="11" Cursor="Hand" ToolTip="Reset to default" MouseEnter="ResetBtn_MouseEnter" MouseLeave="ResetBtn_MouseLeave"/>
+                            </Grid>
+                            <Grid Margin="0,4,0,12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="50"/></Grid.ColumnDefinitions>
+                                <Slider x:Name="ActionSpeedSlider" Minimum="1" Maximum="10" Value="5" ValueChanged="ActionSpeedSlider_ValueChanged" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="ActionSpeedValue" Text="5" Style="{StaticResource SliderValue}" HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="CURSOR SPEED" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Cursor="Hand" MouseLeftButtonDown="SensitivityLabel_DblClick" VerticalAlignment="Center">
+                                    <TextBlock.ToolTip><ToolTip Content="Max cursor speed px/s. Recommended: 900–1400 · ↺ Reset"/></TextBlock.ToolTip>
+                                </TextBlock>
+                                <Button Grid.Column="1" Content="↺" Click="SensitivityReset_Click" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#3A4560" FontSize="11" Cursor="Hand" ToolTip="Reset to default" MouseEnter="ResetBtn_MouseEnter" MouseLeave="ResetBtn_MouseLeave"/>
+                            </Grid>
+                            <Grid Margin="0,4,0,16">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="50"/></Grid.ColumnDefinitions>
+                                <Slider x:Name="SensitivitySlider" Minimum="400" Maximum="1800" Value="1200" ValueChanged="SensitivitySlider_ValueChanged" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="SensitivityValue" Text="1200" Style="{StaticResource SliderValue}" HorizontalAlignment="Right"/>
+                            </Grid>
                             <Grid Margin="0,5,0,15">
                                 <TextBlock Text="ACTION RPG MODE" Foreground="#E5B842" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
                                 <Border x:Name="ToggleBg" Width="44" Height="24" CornerRadius="12" Background="#080A0F" BorderBrush="#2A3245" BorderThickness="1.5" HorizontalAlignment="Right" Cursor="Hand" MouseLeftButtonDown="MoveModeToggle_Click">
@@ -215,7 +267,6 @@
                             <ScrollViewer x:Name="PanelR1"   Visibility="Collapsed"> <StackPanel x:Name="MappingsR1"/> </ScrollViewer>
                             <ScrollViewer x:Name="PanelL2"   Visibility="Collapsed"> <StackPanel x:Name="MappingsL2"/> </ScrollViewer>
                             <ScrollViewer x:Name="PanelR2"   Visibility="Collapsed"> <StackPanel x:Name="MappingsR2"/> </ScrollViewer>
-                            
                             <Border x:Name="PanelInfo" Visibility="Collapsed" Background="#080A0F" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="8" Padding="25">
                                 <StackPanel>
                                     <TextBlock x:Name="InfoClassName" FontSize="24" FontWeight="Black" Foreground="#39FF14" Effect="{StaticResource NeonGlow}"/>
@@ -234,7 +285,6 @@
                                     <TextBlock x:Name="InfoTips" Foreground="#A1B0C5" FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
                                 </StackPanel>
                             </Border>
-
                             <Grid x:Name="PanelLog" Visibility="Collapsed">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -245,6 +295,7 @@
                                     <Button Click="BtnLogClear_Click" Style="{StaticResource ConsoleGhostBtn}" Width="110" Height="32" Margin="0,0,10,0"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M2 4H14M5 4V2H11V4M6 7V12M10 7V12M3 4L4 14H12L13 4" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Clear Log" VerticalAlignment="Center"/></StackPanel></Button>
                                     <Button Click="BtnLogExport_Click" Style="{StaticResource ConsoleGhostBtn}" Width="110" Height="32"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Data="M3 2H11L14 5V14H2V2ZM5 2V7H11V2M9 3V6" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform"/></Viewbox><TextBlock Text="Export" VerticalAlignment="Center"/></StackPanel></Button>
                                 </StackPanel>
+                                <!-- Log-Filter -->
                                 <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
                                     <TextBlock Text="FILTER:" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                     <CheckBox x:Name="LogFilterEngine"  Content="Engine"  IsChecked="True" Foreground="#A1B0C5" FontSize="10" Margin="0,0,12,0" Checked="LogFilter_Changed" Unchecked="LogFilter_Changed"/>
@@ -258,7 +309,6 @@
                                     </ScrollViewer>
                                 </Border>
                             </Grid>
-                            
                             <Viewbox Stretch="Uniform" Opacity="0.05" IsHitTestVisible="False">
                                 <Grid x:Name="PreviewContainer"/>
                             </Viewbox>
@@ -266,8 +316,6 @@
                     </Grid>
                 </Border>
             </Grid>
-
-            <!-- 4. FOOTER -->
             <Border Grid.Row="4" Background="#07090D" BorderBrush="#2A3245" BorderThickness="0,1,0,0" CornerRadius="0,0,12,12">
                 <Grid Margin="20,0">
                     <Grid.ColumnDefinitions>

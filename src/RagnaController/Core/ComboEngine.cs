@@ -23,18 +23,18 @@ namespace RagnaController.Core
         public bool IsActive    => CurrentStep > 0 && Enabled;
         public int  TotalSteps  => Sequence.Count;
 
-        /// <summary>z.B. "COMBO 2/3"</summary>
+        /// <summary>e.g. "COMBO 2/3"</summary>
         public string StateLabel => IsActive
             ? $"COMBO {CurrentStep}/{TotalSteps}"
             : "IDLE";
 
         public event Action<int>? ComboStepFired;
 
-        // --- Interner Zustand ---
+        // Internal state
         private int  _delayTimer;   // remaining delay until next step fires
         private bool _wasHeld;      // whether the combo button was held last tick
 
-        // --- Reset ---
+        // Reset
         public void Reset()
         {
             CurrentStep  = 0;
@@ -43,9 +43,16 @@ namespace RagnaController.Core
         }
 
         /// <summary>
+        /// Call when an overlay (Daisy Wheel, Radial Menu) closes while the combo
+        /// button is still physically held. Without this, the engine would see
+        /// isHeld=true with _wasHeld=false and fire Step 1 as a false "fresh press".
+        /// </summary>
+        public void SyncHeldState(bool currentlyHeld) => _wasHeld = currentlyHeld;
+
+        /// <summary>
         /// Must be called every engine tick.
         /// isHeld = true while the user holds the combo button.
-        /// ms     = Tick-Dauer in Millisekunden (8 bei 125 Hz).
+        /// ms = tick duration in milliseconds (8 at 125 Hz).
         /// </summary>
         public void Update(bool isHeld, int ms)
         {
@@ -68,7 +75,7 @@ namespace RagnaController.Core
             {
                 if (CurrentStep < Sequence.Count)
                 {
-                    // Skill feuern
+                    // Fire the skill
                     InputSimulator.TapKey(Sequence[CurrentStep]);
                     ComboStepFired?.Invoke(CurrentStep + 1);
 

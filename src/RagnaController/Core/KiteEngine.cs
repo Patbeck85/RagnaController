@@ -134,7 +134,7 @@ namespace RagnaController.Core
         private void BeginRetreat()
         {
             _retreatDirX = -_lastAimX;
-            _retreatDirY = _lastAimY;
+            _retreatDirY = -_lastAimY; // negative: retreat AWAY from aim direction (screen Y inverted)
             _retreatAccumX = 0f;
             _retreatAccumY = 0f;
             _retreatClickTimer = 0;

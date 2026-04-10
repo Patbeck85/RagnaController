@@ -1,7 +1,7 @@
 <Window x:Class="RagnaController.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Width="440" Height="500"
+        Title="Settings" Width="440" Height="600"
         Background="Transparent" WindowStyle="None" AllowsTransparency="True"
         WindowStartupLocation="CenterOwner" MouseLeftButtonDown="Window_MouseLeftButtonDown">
     <Border Background="#080A0F" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="10">
@@ -23,9 +23,16 @@
                         <CheckBox x:Name="ChkFocusLock"      Content="Pause Engine when RO is in Background" Foreground="#E5B842" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
                         <TextBlock Text="Prevents accidental input in Discord or browser when tabbed out." Foreground="#7D8B9E" FontSize="11" Margin="28,0,0,10" TextWrapping="Wrap"/>
                         <Grid Margin="28,0,0,25">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="Process name:" Foreground="#A1B0C5" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Game client:" Foreground="#A1B0C5" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
                             <TextBox x:Name="TxtFocusProcess" Grid.Column="1" Text="ragexe" FontFamily="Consolas" FontSize="13" Height="32"/>
+                            <Button Grid.Column="2" x:Name="BtnBrowseExe" Content="Browse…" Click="BtnBrowseExe_Click"
+                                    Style="{StaticResource ConsoleGhostBtn}" Height="32" Padding="12,0" Margin="8,0,0,0"
+                                    ToolTip="Select your RO client .exe — only the filename (without .exe) is stored"/>
                         </Grid>
                         <TextBlock Text="LOG LEVEL" Foreground="#7D8B9E" FontSize="10" FontWeight="Bold" Margin="0,0,0,8"/>
                         <ComboBox x:Name="LogLevelCombo" Style="{StaticResource DarkComboBox}" Height="36" FontSize="13">

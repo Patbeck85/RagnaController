@@ -12,7 +12,7 @@ namespace RagnaController
 {
     public partial class RadialMenuWindow : Window
     {
-        private readonly List<RadialItem> _items;
+        private readonly List<RadialItem> _items;   // readonly ref, contents mutable
         private int _selectedIndex = -1;
         private readonly List<Border> _visualItems = new();
 
@@ -156,7 +156,26 @@ namespace RagnaController
                 else if (item.Key != VirtualKey.None)
                     InputSimulator.TapKey(item.Key);
             }
-            Close();
+            // Hide instead of Close — prevents WPF transparency re-init overhead
+            _selectedIndex = -1;
+            Visibility = System.Windows.Visibility.Hidden;
+        }
+
+        /// <summary>Re-show the already-created window and reset selection.</summary>
+        public void Reopen(List<RadialItem> newItems)
+        {
+            // Rebuild visuals if item list reference changed OR count differs
+            // (reference equality misses in-place mutations from profile reload)
+            bool needsRedraw = newItems != _items
+                || newItems.Count != _items.Count;
+            if (needsRedraw)
+            {
+                _items.Clear();
+                _items.AddRange(newItems);
+                DrawItems();
+            }
+            _selectedIndex = -1;
+            Visibility = System.Windows.Visibility.Visible;
         }
     }
 }

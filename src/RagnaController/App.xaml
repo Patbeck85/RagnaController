@@ -7,18 +7,24 @@
         <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
 
+        
         <!-- Color Palette (Obsidian & Gold) -->
-        <SolidColorBrush x:Key="GoldBrush"     Color="#E5B842"/>
-        <SolidColorBrush x:Key="GoldDarkBrush" Color="#B88A1D"/>
-        <SolidColorBrush x:Key="BG1"           Color="#080A0F"/>
-        <SolidColorBrush x:Key="BG2"           Color="#121620"/>
-        <SolidColorBrush x:Key="BG3"           Color="#1A2030"/>
-        <SolidColorBrush x:Key="BG4"           Color="#2A3245"/>
-        <SolidColorBrush x:Key="TextHi"        Color="#F0F4F8"/>
-        <SolidColorBrush x:Key="TextMid"       Color="#A1B0C5"/>
-        <SolidColorBrush x:Key="TextLow"       Color="#7D8B9E"/>
+        
+        <SolidColorBrush x:Key="GoldBrush"     Color="#E5B842"/> <!-- Neon gold -->
+        <SolidColorBrush x:Key="GoldDarkBrush" Color="#B88A1D"/> <!-- Dimmed gold -->
+        
+        <!-- Backgrounds (Obsidian) -->
+        <SolidColorBrush x:Key="BG1"           Color="#080A0F"/> <!-- Deep black -->
+        <SolidColorBrush x:Key="BG2"           Color="#121620"/> <!-- Panels -->
+        <SolidColorBrush x:Key="BG3"           Color="#1A2030"/> <!-- Hover states -->
+        <SolidColorBrush x:Key="BG4"           Color="#2A3245"/> <!-- Borders -->
+        
+        <!-- Typography -->
+        <SolidColorBrush x:Key="TextHi"        Color="#F0F4F8"/> <!-- White/grey -->
+        <SolidColorBrush x:Key="TextMid"       Color="#A1B0C5"/> <!-- Mid grey -->
+        <SolidColorBrush x:Key="TextLow"       Color="#7D8B9E"/> <!-- Dark grey -->
 
-        <!-- Legacy aliases -->
+        <!-- Legacy aliases for code compatibility -->
         <SolidColorBrush x:Key="BG1Brush"      Color="#080A0F"/>
         <SolidColorBrush x:Key="BG2Brush"      Color="#121620"/>
         <SolidColorBrush x:Key="BG3Brush"      Color="#1A2030"/>
@@ -29,6 +35,7 @@
         <SolidColorBrush x:Key="TextLowBrush"  Color="#7D8B9E"/>
         <SolidColorBrush x:Key="NeonBrush"     Color="#E5B842"/>
 
+        <!-- Gradients & Shadows -->
         <LinearGradientBrush x:Key="WindowGradient" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#07090D" Offset="0"/>
             <GradientStop Color="#10141D" Offset="1"/>
@@ -37,7 +44,9 @@
         <DropShadowEffect x:Key="NeonGlow" Color="#E5B842" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
         <DropShadowEffect x:Key="CardShadow" Color="#000000" BlurRadius="10" ShadowDepth="4" Opacity="0.4" Direction="270"/>
 
-        <!-- Core Styles -->
+        
+        <!-- Core Styles — Cards & TextBoxes -->
+        
         <Style x:Key="CardBorder" TargetType="Border">
             <Setter Property="Background" Value="#CC121620"/>
             <Setter Property="BorderBrush" Value="#2A3245"/>
@@ -46,20 +55,23 @@
             <Setter Property="Effect" Value="{StaticResource CardShadow}"/>
         </Style>
 
+        <!-- TextBox: gold focus glow, no Windows-blue -->
         <Style TargetType="TextBox">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#F0F4F8"/>
-            <Setter Property="CaretBrush" Value="#E5B842"/>
+            <Setter Property="CaretBrush" Value="#E5B842"/> <!-- Caret is now gold -->
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="10,8"/>
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
+                        <!-- Wrapper border for focus glow effect -->
                         <Border x:Name="bg" Background="#121620" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="6">
                             <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <!-- Smooth focus transition -->
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="bg" Property="BorderBrush" Value="#E5B842"/>
                                 <Setter TargetName="bg" Property="Effect" Value="{StaticResource NeonGlow}"/>
@@ -70,7 +82,11 @@
             </Setter>
         </Style>
 
-        <!-- Primary button (SICHERE TRIGGERS) -->
+        
+        <!-- Button Styles — with micro-animations -->
+        
+        
+        <!-- Primary button (gold/black) -->
         <Style x:Key="ConsolePrimaryBtn" TargetType="Button">
             <Setter Property="Background"      Value="#1A2030"/>
             <Setter Property="Foreground"      Value="#E5B842"/>
@@ -86,8 +102,22 @@
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bd" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="#252D40" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bd" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="#1A2030" Duration="0:0:0.25"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <!-- IsMouseOver for Effect (Setter not valid inside EventTrigger) -->
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#252D40"/>
                                 <Setter TargetName="bd" Property="Effect" Value="{StaticResource NeonGlow}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
@@ -103,7 +133,7 @@
             </Setter>
         </Style>
 
-        <!-- Ghost button (SICHERE TRIGGERS) -->
+        <!-- Ghost button (subtle, for toolbars) -->
         <Style x:Key="ConsoleGhostBtn" TargetType="Button" BasedOn="{StaticResource ConsolePrimaryBtn}">
             <Setter Property="Background"  Value="Transparent"/>
             <Setter Property="Foreground"  Value="#A1B0C5"/>
@@ -115,10 +145,22 @@
                             <ContentPresenter x:Name="txt" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#1A2030"/>
-                                <Setter TargetName="bd" Property="BorderBrush" Value="#7D8B9E"/>
-                            </Trigger>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bd" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="#1A2030" Duration="0:0:0.15"/>
+                                        <ColorAnimation Storyboard.TargetName="bd" Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)" To="#7D8B9E" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bd" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="#00000000" Duration="0:0:0.25"/>
+                                        <ColorAnimation Storyboard.TargetName="bd" Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)" To="#2A3245" Duration="0:0:0.25"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="#2A3245"/>
                                 <Setter Property="Foreground" Value="#F0F4F8"/>
@@ -129,7 +171,7 @@
             </Setter>
         </Style>
 
-        <!-- Status Buttons -->
+        <!-- Danger, Info & Warning buttons -->
         <Style x:Key="ConsoleDangerBtn" TargetType="Button" BasedOn="{StaticResource ConsolePrimaryBtn}">
             <Setter Property="Foreground" Value="#FF3A52"/>
             <Setter Property="BorderBrush" Value="#FF3A52"/>
@@ -143,7 +185,7 @@
             <Setter Property="BorderBrush" Value="#E5B842"/>
         </Style>
 
-        <!-- Tab buttons -->
+        <!-- Tab buttons (underline style) -->
         <Style x:Key="TabButton" TargetType="Button" BasedOn="{StaticResource ConsoleGhostBtn}">
             <Setter Property="BorderThickness" Value="0,0,0,2"/>
         </Style>
@@ -152,14 +194,18 @@
             <Setter Property="Background"      Value="Transparent"/>
         </Style>
 
-        <!-- Slider -->
+        
+        <!-- Sliders, Scrollbars & ComboBoxes -->
+        
         <Style TargetType="Slider">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid Height="20">
+                            <!-- Track groove -->
                             <Border Height="4" Background="#080A0F" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="2" VerticalAlignment="Center" Margin="5,0"/>
                             <Track x:Name="PART_Track">
+                                <!-- Gold fill left of thumb -->
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Background="#E5B842" BorderThickness="0">
                                         <RepeatButton.Template>
@@ -169,10 +215,11 @@
                                         </RepeatButton.Template>
                                     </RepeatButton>
                                 </Track.DecreaseRepeatButton>
+                                <!-- Glowing thumb -->
                                 <Track.Thumb>
                                     <Thumb>
                                         <Thumb.Template>
-                                            <ControlTemplate TargetType="Thumb">
+                                            <ControlTemplate>
                                                 <Ellipse x:Name="thumb" Width="14" Height="14" Fill="#E5B842" Stroke="#121620" StrokeThickness="2" Cursor="Hand">
                                                     <Ellipse.Effect>
                                                         <DropShadowEffect Color="#E5B842" BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>
@@ -204,7 +251,7 @@
             </Setter>
         </Style>
 
-        <!-- Dark ComboBox -->
+        <!-- Dark ComboBox, no Windows-blue -->
         <Style x:Key="DarkComboBox" TargetType="ComboBox">
             <Setter Property="Background"  Value="#121620"/>
             <Setter Property="Foreground"  Value="#F0F4F8"/>
@@ -247,7 +294,7 @@
             </Setter>
         </Style>
 
-        <!-- ComboBox Items -->
+        <!-- ComboBox dropdown items -->
         <Style TargetType="ComboBoxItem">
             <Setter Property="Foreground" Value="#A1B0C5"/>
             <Setter Property="Padding" Value="10,8"/>
@@ -273,7 +320,7 @@
             </Setter>
         </Style>
 
-        <!-- ScrollBar -->
+        <!-- Slim, unobtrusive scrollbar -->
         <Style TargetType="ScrollBar">
             <Setter Property="Width" Value="8"/>
             <Setter Property="Template">
@@ -284,13 +331,13 @@
                                 <Track.Thumb>
                                     <Thumb>
                                         <Thumb.Template>
-                                            <ControlTemplate TargetType="Thumb">
+                                            <ControlTemplate>
                                                 <Border x:Name="bd" Background="#2A3245" CornerRadius="4" Margin="2"/>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
                                                         <Setter TargetName="bd" Property="Background" Value="#7D8B9E"/>
                                                     </Trigger>
-                                                    <Trigger Property="IsDragging" Value="True">
+                                                    <Trigger Property="IsMouseCaptured" Value="True">
                                                         <Setter TargetName="bd" Property="Background" Value="#E5B842"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
@@ -305,7 +352,7 @@
             </Setter>
         </Style>
 
-        <!-- Checkbox -->
+        <!-- Checkbox — gold checkmark instead of Windows-blue -->
         <Style TargetType="CheckBox">
             <Setter Property="Foreground" Value="#F0F4F8"/>
             <Setter Property="FontSize" Value="14"/>
@@ -332,5 +379,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
     </Application.Resources>
 </Application>

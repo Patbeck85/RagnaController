@@ -59,10 +59,26 @@ namespace RagnaController
 
         private void LblSettingsPath_Click(object sender, MouseButtonEventArgs e)
         {
-            try { Process.Start("explorer.exe", LblSettingsPath.Text); } catch { }
+            try { Process.Start("explorer.exe", $"\"{LblSettingsPath.Text}\""); } catch { }
         }
 
         private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
+
+        private void BtnBrowseExe_Click(object sender, RoutedEventArgs e)
+        {
+            var ofd = new Microsoft.Win32.OpenFileDialog
+            {
+                Title  = "Select your Ragnarok Online client executable",
+                Filter = "Executable (*.exe)|*.exe",
+                CheckFileExists = true
+            };
+            if (ofd.ShowDialog() == true)
+            {
+                // Store only the filename without extension — that's what GetProcessById returns
+                string processName = System.IO.Path.GetFileNameWithoutExtension(ofd.FileName);
+                TxtFocusProcess.Text = processName;
+            }
+        }
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.LeftButton == MouseButtonState.Pressed) DragMove();

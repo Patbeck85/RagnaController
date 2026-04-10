@@ -16,6 +16,7 @@ namespace RagnaController.Profiles
         private static readonly JsonSerializerOptions Opt = new()
         {
             WriteIndented = true,
+            PropertyNameCaseInsensitive = true,
             Converters = { new JsonStringEnumConverter() }
         };
         public List<Profile> Profiles { get; } = new();
@@ -39,7 +40,25 @@ namespace RagnaController.Profiles
                         if (i >= 0) Profiles[i] = p; else Profiles.Add(p);
                     }
                 }
-                catch { }
+                catch
+                {
+                    // Primary .json is corrupt (e.g. 0-byte after crash during save) — try the backup
+                    string bak = f.Replace(".json", ".bak.json");
+                    if (File.Exists(bak))
+                    {
+                        try
+                        {
+                            var pBak = JsonSerializer.Deserialize<Profile>(File.ReadAllText(bak), Opt);
+                            if (pBak != null)
+                            {
+                                pBak.IsBuiltIn = false;
+                                int i = Profiles.FindIndex(x => x.Name == pBak.Name);
+                                if (i >= 0) Profiles[i] = pBak; else Profiles.Add(pBak);
+                            }
+                        }
+                        catch { }
+                    }
+                }
             }
             // Safety net: profile list must never be empty
             if (Profiles.Count == 0)
@@ -203,13 +222,18 @@ namespace RagnaController.Profiles
             return l;
         }
 
+        /// <summary>Removes characters that are illegal in Windows file names.</summary>
+        private static string SafeName(string name) =>
+            string.Concat(name.Split(System.IO.Path.GetInvalidFileNameChars())).Trim();
+
         public void SaveProfile(Profile p)
         {
-            string path = Path.Combine(Dir, p.Name + ".json");
+            string safe = SafeName(p.Name);
+            string path = Path.Combine(Dir, safe + ".json");
             // Auto-backup previous version before overwrite
             if (File.Exists(path))
             {
-                string bak = Path.Combine(Dir, p.Name + ".bak.json");
+                string bak = Path.Combine(Dir, safe + ".bak.json");
                 try { File.Copy(path, bak, overwrite: true); } catch { }
             }
             bool was = p.IsBuiltIn;
@@ -218,7 +242,13 @@ namespace RagnaController.Profiles
             p.IsBuiltIn = was;
         }
 
-        public void AddAndSave(Profile p) { Profiles.Add(p); SaveProfile(p); }
+        public void AddAndSave(Profile p)
+        {
+            int idx = Profiles.FindIndex(x => x.Name == p.Name);
+            if (idx >= 0) Profiles[idx] = p;   // overwrite existing
+            else          Profiles.Add(p);      // new entry
+            SaveProfile(p);
+        }
         public void Export(Profile p, string path) => File.WriteAllText(path, JsonSerializer.Serialize(p, Opt));
         public Profile? ImportPreview(string path)
         {
@@ -230,7 +260,7 @@ namespace RagnaController.Profiles
         {
             if (!p.IsBuiltIn)
             {
-                string path = Path.Combine(Dir, p.Name + ".json");
+                string path = Path.Combine(Dir, SafeName(p.Name) + ".json");
                 if (File.Exists(path)) File.Delete(path);
                 Profiles.Remove(p);
             }

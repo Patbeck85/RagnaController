@@ -1,226 +1,190 @@
 # RagnaController — Feature Reference
 
-**Tick rate:** 125 Hz (8 ms) · **Profiles:** 39 · **Controller brands:** 8
+**Tick rate:** 125 Hz (8 ms, ±0.5 ms jitter) · **Profiles:** 39 · **Controller brands:** 8
 
 ---
 
 ## Startup & UI Shell
 
-### Splash Screen (`SplashWindow`)
-- Shows for 3 seconds on every launch.
-- Fade-in (0.5 s), animated Neon progress bar (cyan → purple with glow).
-- Logo pulse animation, status text cycles: *Initializing → Loading profiles → Starting engines → Connecting controller → Ready*.
-- Fades out (0.3 s) as MainWindow opens simultaneously.
-- Wrapped in try/catch — startup errors shown as MessageBox, app exits cleanly.
+### Obsidian & Gold UI
+- Fully custom WPF theme: Glassmorphism panels, DropShadow effects, gold NeonGlow on active elements.
+- Micro-animations on buttons (150 ms fade-in, 250 ms fade-out via `ColorAnimation` Storyboards).
+- Tab bar active state: selected tab gets gold bottom-border via `TabButtonActive` style.
+- All toolbar icons are WPF `Path` vector graphics (Feather-style, stroke-based) — crisp at any DPI, tinted by button `Foreground` binding.
 
-### System Tray (`InitTrayIcon`)
-- `NotifyIcon` with embedded `Assets/icon.ico`.
-- Double-click → restores and activates MainWindow.
-- Right-click menu: **Show RagnaController** / **Exit**.
-- Disposed on `Window_Closing` — no handle leaks.
+### Focus Lock
+- `GetForegroundWindow()` polled every ~500 ms (same counter as WindowTracker).
+- If the foreground window is not the configured RO process, all controller input is suppressed.
+- Status bar shows `⛔ FOCUS LOCK — switch to RO` in orange while blocked.
+- Process name configurable in Settings with a file-picker (Browse button → `.exe` selected → filename without extension stored).
+- Applies to Focus Lock **and** WindowTracker — one setting, both systems.
 
-### Global Hotkeys
-- Registered via Win32 `RegisterHotKey` on `SourceInitialized`.
-- Unregistered via `UnregisterHotKey` on `Window_Closing`.
-- **Ctrl+1–4** → switch to profile slots 1–4.
-- Works even when the window is minimized to the system tray.
+### Visual Deadzone Ring
+- Red semi-transparent ellipse rendered behind the stick dot on both L-STICK and R-STICK visualisers.
+- Diameter = `deadzone × 50 px` (visualiser is 50 × 50 px = ±1.0 stick range).
+- Updates live on slider drag, profile load, and double-click reset.
+- Makes stick-drift calibration visual and instant.
 
 ### Mini Mode (`MiniModeWindow`)
-- 280×120 px always-on-top overlay.
-- Shows: current profile name, engine state, active/inactive indicator, combat phase.
-- Draggable; click X → securely returns to full MainWindow.
-- Live-updated every UI tick via `UpdateState()`.
+- 280 × 120 px always-on-top overlay showing profile name and engine state.
+- Right-click: toggle click-through (`WS_EX_TRANSPARENT`) — turns border blue when active.
+- **Emergency escape:** press `Start + Back` on the controller to restore the main window from any state, including click-through.
+- Tooltip explains the shortcut.
+
+---
+
+## Window Tracking (`WindowTracker`)
+
+Finds the RO client window and computes its exact centre in physical screen pixels, accounting for DPI scaling and window position.
+
+**Win32 call chain:**
+1. `GetForegroundWindow()` — check if active window is RO (priority for multi-client)
+2. `GetProcessById()` — confirm process name matches setting
+3. `GetClientRect()` — inner drawable area (excludes title bar and borders)
+4. `ClientToScreen()` — convert client origin to screen coordinates
+5. `MonitorFromWindow()` — find which monitor the window is on
+6. `GetDpiForMonitor()` — get that monitor's actual DPI (e.g. 192 on 4K @ 200%)
+7. Scale: `physicalPixel = logicalPixel × (monitorDPI / 96)`
+
+**Multi-client behaviour:** When using Window Switcher, `WindowTracker` always prefers the current foreground window. After a switch, `ForceRefreshOnNextTick()` triggers an immediate re-centre (within 200 ms) so the new client's monitor and DPI are used.
+
+**Status display:** Tick-latency field shows `2.3ms | RO 1.50x DPI` or `2.3ms | RO: not found`.
 
 ---
 
 ## Movement Engine (`MovementEngine`)
 
-Left stick drives click-to-move via Windows `SendInput` left-click.
+Left stick drives click-to-move via Windows `SendInput` left-click. Centre position comes from `WindowTracker` (DPI-corrected) with screen-centre fallback.
 
 | Setting | Range | Effect |
 |---|---|---|
-| Deadzone | 0.0–1.0 | Dead zone radius before stick registers |
+| Deadzone | 0.0–0.5 | Dead zone radius (visualised by red ring) |
 | Curve | 1.0–4.0 | Non-linear sensitivity curve |
-| Sensitivity | 1–10 | Overall movement speed multiplier |
-| Coast Frames | 0–10 | Extra move ticks after stick release (momentum) |
 | Action Speed | 1.0–10.0 | Leash radius for Action RPG mode |
+| Max Cursor Speed | px/s | Cursor top speed |
 
-**Action RPG Mode** (toggleable): holds left-click while moving vs. single click per direction change.
+**Action RPG Mode:** holds left-click while moving vs. single click per direction change.
 
----
-
-## Cursor Engine (`CursorEngine`)
-
-Right stick moves the OS cursor when no special engine owns it.
-
-| Setting | Description |
-|---|---|
-| Max Speed | Pixels/second at full deflection |
-| Deadzone | Dead zone before cursor moves |
-| Curve | Non-linear acceleration |
-
-**Precision Mode** (SELECT button): cursor speed divided by ~3 for fine targeting.  
-Badge shown in header. Toggling triggers haptic feedback.
+**Loot Vacuum** (`LB + RB`): spirals cursor around character centre, one click every 50 ms (throttled to prevent GC pressure from `Task.Run` spam).
 
 ---
 
 ## 5-Layer Input System
 
-| Layer | Modifier | Example |
-|---|---|---|
-| Base | — | A → left-click |
-| L1 | Hold Left Bumper | L1+A → F1 |
-| R1 | Hold Right Bumper | R1+A → F5 |
-| L2 | Hold Left Trigger (>50) | L2+A → F9 |
-| R2 | Hold Right Trigger (>50) | R2+A → Ctrl+F1 |
-
-**Fixed base-layer actions (not remappable):**
-- **X hold** → hold Alt (show ground items)  
-- **R3** → double-click — suppressed when any special engine is active  
-- **SELECT** → Precision Mode toggle  
-- **START + D-Pad ↑/↓** → profile quick-switch ±1  
-
----
-
-## Turbo System
-
-Configured per-button in **Button Remap** window.
-
-| Mode | Behaviour |
+| Layer | Modifier |
 |---|---|
-| **Standard** | Fixed-interval repeat while held |
-| **Burst** | 3 rapid presses on first hold, then standard rate |
-| **Rhythmic** | Interval oscillates via sine wave — organic, unpredictable timing |
-| **Adaptive** | Instant first press, follow-ups slow to ~attack animation length |
+| Base | — |
+| L1 | Hold Left Bumper |
+| R1 | Hold Right Bumper |
+| L2 | Hold Left Trigger |
+| R2 | Hold Right Trigger |
 
-Minimum interval: 30 ms. Turbo runs safely inside the 125 Hz tick loop.
+**Fixed shortcuts (not remappable):**
+- `X hold` → Alt hold (show ground items)
+- `R3` → double-click
+- `Start + D-Pad ↑/↓` → profile quick-switch
+- `Start + Back` → restore main window from Mini-Mode
+- `Back + L1` → Voice-to-Chat
+- `Back + R1` → Daisy Wheel keyboard
+- `LT + RT` → Radial emote menu
+- `L3 + R3` → Panic heal
 
 ---
 
 ## Combat Engines
 
-Toggle on/off with **L3** (when enabled in profile). Only one engine owns the right stick at a time.
+Toggle with **L3**. Only one engine owns the right stick at a time.
 
 ### AutoTargetEngine — Melee
-
 FSM: **Idle → Seeking → Engaged → Attacking**
 
-- **Seeking:** Tab key every `TabCycleMs` ms  
-- **Engaged:** right-click to lock target  
-- **Attacking:** fires `AutoAttackKeyVK` every `AutoAttackIntervalMs` ms  
-- Right stick + R1 = directional snap aim  
-- `AutoRetargetEnabled`: re-enters Seeking after target dies  
+**Smart Skill Auto-Aim (Cursor Juggling):** when a target is locked and a skill button is pressed, the engine atomically: saves cursor position → snaps to `_lockPos` → fires skill + click → restores cursor. Completes in ~12 ms via `SemaphoreSlim`-guarded `Task.Run`.
 
 ### KiteEngine — Ranged
-
 FSM: **Lock → Attack → Retreat → Pivot → Relock**
 
-- **Lock:** right-clicks target  
-- **Attack:** fires `KiteAttackKeyVK`, counts up to `KiteAttacksBeforeRetreat`  
-- **Retreat:** moves cursor back `KiteRetreatCursorDist` px over `KiteRetreatDurationMs` ms  
-- **Pivot:** swings cursor back toward enemy over `KitePivotDurationMs` ms  
-- **Hold R2** = hold-ground (skip retreat phase)  
-- **Press L2** = force immediate retreat  
+Automates hit-and-run for Archers/Hunters. Hold R2 to hold ground, L2 to force immediate retreat.
 
 ### MageEngine — Mage / Wizard / Sage
-
-**Ground-target mode** (default):
-- Right stick aims cursor
-- R3 fires `MageGroundSpellKeyVK`
-
-**Bolt mode** (hold R2):
-- R3 locks target, auto-fires `MageBoltKeyVK` with `MageBoltCastDelayMs` delay
-
-**Defensive** (hold L2):
-- Fires `MageDefensiveKeyVK` with cooldown (`MageDefensiveCooldownMs`)
+- Ground-target: right stick aims, R3 places spell.
+- Bolt mode (hold R2): R3 locks target, auto-fires bolts.
 
 ### SupportEngine — Priest / High Priest
+- Right stick aims at ally, R3 snaps + casts Heal.
+- Tab-cycles through party automatically or manually.
 
-- Right stick → aim cursor at ally, R3 → snap + heal (`HealKeyVK`)  
-- L3 while active → self-heal (`SelfHealKeyVK`)  
-- R1 → Tab cycle through party (`SupportTabCycleMs`)  
-- Hold R2 → ground mode for Sanctuary (`SanctuaryKeyVK`)  
-- `SupportAutoCycleEnabled`: heals party on interval automatically  
+---
+
+## Voice-to-Chat (`VoiceChatService`)
+
+**Trigger:** `Back + L1`
+
+Uses Windows Speech Recognition (`System.Speech`). Listens until silence, then opens RO chat, types the recognised string as Unicode key events, and submits. `SendChatString` is serialised with `_isChatting` flag — rapid double-fires queue instead of interleaving.
+
+---
+
+## Daisy Wheel Keyboard (`DaisyWheelWindow`)
+
+**Trigger:** `Back + R1`
+
+Circular on-screen keyboard. Left stick selects sector, A/B/X/Y types characters. L3 = Backspace, R3 = Space, Start = submit. Y-axis correctly inverted (`Atan2(-ly, lx)`) to match physical stick direction.
+
+---
+
+## Radial Emote Menu (`RadialMenuWindow`)
+
+**Trigger:** Hold `LT + RT`
+
+Up to 8 emote slots with downloaded RO emote images. Window instance is reused (`Visibility.Hidden`/`Visible`) — no WPF transparency re-init on rapid trigger presses.
 
 ---
 
 ## Macro System (`MacroRecorder`)
 
-**Recording:**
-- Record any key + click sequence with real timing
-- Minimum step delay 50 ms (noise filter)
-
-**Storage — `%AppData%\RagnaController\Macros\`:**
-- `MacroRecorder.SaveMacro(macro)` — saves as JSON, returns file path  
-- `MacroRecorder.LoadMacro(path)` — deserializes JSON → `Macro`  
-- `MacroRecorder.GetSavedMacroFiles()` — lists all `.json` files in folder  
-- `MacroRecorder.DeleteMacro(path)` — deletes file  
-
-**Playback:**
-- Loop count: 1 = once · 0 = infinite · N = N times  
-- Runs inside engine tick loop — non-blocking  
-
-**Macro Editor:**
-- Add / remove / reorder steps  
-- Adjust individual step delays  
-- Speed-up (`÷ multiplier`) · Slow-down (`× multiplier`) · Optimize (removes steps < 30 ms)  
-
-**Binding:** Assign saved macro to any button or layer combo in **Button Remap** window.
+- Record any key + click sequence with real timing (minimum step 50 ms).
+- Editor: add/remove/reorder steps, adjust delays, Optimize (remove steps < 30 ms).
+- Storage: `%AppData%\RagnaController\Macros\*.json`
+- Loop: 1 = once, 0 = infinite, N = N times.
 
 ---
 
 ## Profile System
 
-**39 built-in profiles** — all RO classes from Novice to Transcended.  
-Each defines: engine settings, cursor/movement tuning, F-key recommendations, class tips.
+39 built-in profiles — all RO classes from Novice to Transcended.
 
-**Profile Library window:** search by name, filter by class, load, export JSON, import JSON, delete.
+**Profile Library:** search, filter by class, load, export JSON, import JSON, delete.
 
-**Profile Wizard (4 steps):** Name + class → Engine selection → Key bindings → Review + create.
+**Profile Wizard:** 4-step guided creation.
 
-**Storage:**  
-- Built-ins: code-defined, never written to disk unless modified  
-- User saves: `%AppData%\RagnaController\Profiles\`  
+**Duplicate protection:** `AddAndSave` replaces existing profiles with the same name instead of duplicating.
 
----
-
-## Controller Detection (`ControllerService`)
-
-WMI query: `Win32_PnPEntity WHERE PNPClass = 'HIDClass'` — checks device name and HardwareID.
-
-| Brand | VID | PIDs |
-|---|---|---|
-| Sony PS5 | 054C | 0CE6 (DualSense), 0DF2 (Edge) |
-| Sony PS4 | 054C | 05C4 (v1), 09CC (v2), 0BA0 (Back Button) |
-| Nintendo | 057E | 2009 (Switch Pro) |
-| 8BitDo | 2DC8 | All models |
-| Logitech | 046D | C21D (F310), C21F (F710), C218 (XInput) |
-| Razer | 1532 | All gamepads |
-| Thrustmaster | 044F | All XInput |
-
-Unrecognised XInput device → labelled **Xbox**.  
-Battery polled every ~10 s → displayed in header (🔋 FULL / 🔋 MEDIUM / ⚠ LOW / ❌ EMPTY / 🔌 WIRED).
+**Corruption recovery:** `Load()` falls back to `.bak.json` if the primary `.json` is unreadable (e.g. after a crash during save).
 
 ---
 
 ## Feedback System (`FeedbackSystem`)
 
-**Rumble events (`FeedbackType`):**  
-EngineStart, EngineStop, CombatModeOn, TargetLocked, SkillFired, KiteRetreat, HealCast, LowSP, ProfileSwitched, PrecisionModeOn, Warning
-
-**Sound:** Windows `SystemSounds` — no audio files required.  
-**Toggle:** sound and rumble independently in Settings window.
+Rumble patterns check `_rumbleEnabled` after every `await Task.Delay` — engine pause or disconnect stops vibration immediately (no ghost rumble).
 
 ---
 
-## Advanced Logger (`AdvancedLogger`)
+## Input Simulator (`InputSimulator`)
 
-- Session file: `%LocalAppData%\RagnaController\Logs\session_YYYY-MM-DD_HH-mm-ss.log`
-- Tick performance: sampled every tick, last 1000 stored in ring buffer
-- Properties: `AverageTickTimeMs`, `MaxTickTimeMs`, `SessionDuration`, `TotalEvents`
-- `ExportSession()` → writes export file, returns path (used by Export Log button)
-- `ClearBuffer()` → clears in-memory log display
-- Log level: Debug · Info · Warning · Error (configurable in Settings)
+- `INPUT` struct uses `LayoutKind.Explicit` with `FieldOffset(8)` for correct 64-bit alignment.
+- `SendChatString` serialised with `volatile bool _isChatting` — prevents key interleaving from concurrent callers.
+- Detects Wine/Proton at startup and adjusts key/click delays accordingly.
+
+---
+
+## Performance
+
+| Item | Detail |
+|---|---|
+| Timer resolution | `timeBeginPeriod(1)` on startup — 1 ms Windows scheduler precision |
+| Tick jitter | ±0.5 ms (was ±5 ms with default 15.6 ms resolution) |
+| Perf log threshold | 25 ms (was 8 ms — was flooding log at normal CPU load) |
+| Vacuum click rate | 1 click/50 ms (was 1 click/8 ms — was spawning ~125 Tasks/sec) |
+| WindowTracker cadence | Refresh every 500 ms; forced immediately after window switch |
 
 ---
 
@@ -230,12 +194,10 @@ Persisted to `%AppData%\RagnaController\settings.json`.
 
 | Setting | Default | Description |
 |---|---|---|
-| AutoStart | false | Start engine immediately on launch |
-| StartMinimized | false | Launch to system tray |
-| StartInMiniMode | false | Launch directly to Mini Mode overlay |
+| FocusLockEnabled | true | Pause engine when RO loses focus |
+| FocusLockProcess | `ragexe` | Process name (set via Browse button) |
+| AutoStart | false | Start engine on launch |
+| StartInMiniMode | false | Launch to Mini-Mode overlay |
 | SoundEnabled | true | Audio feedback |
-| RumbleEnabled | true | Haptic rumble feedback |
-| ShowControllerViz | true | Stick visualisation dots in header |
-| LogLevel | Info | Minimum log level written to file |
-| LastProfileName | (last used) | Auto-selected on next launch |
-| WindowPosition | (last position) | Restored on next launch |
+| RumbleEnabled | true | Haptic rumble |
+| LogLevel | Info | Debug / Info / Warning / Error |

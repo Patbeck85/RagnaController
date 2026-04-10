@@ -84,12 +84,13 @@ namespace RagnaController.Core
                     case RumblePattern.KiteCycle:
                         StartRumble(0.3f, 0.3f, 80);
                         await System.Threading.Tasks.Task.Delay(280);
-                        if (_controller.IsConnected) StartRumble(0.2f, 0f, 100);
+                        // Guard: only fire second pulse if still connected and rumble wasn't cancelled
+                        if (_controller.IsConnected && _lastL > 0) StartRumble(0.2f, 0f, 100);
                         break;
                     case RumblePattern.LowSPPulse:
                         for (int i = 0; i < 3; i++)
                         {
-                            if (!_controller.IsConnected) return;
+                            if (!_controller.IsConnected || !_rumbleEnabled) return;
                             StartRumble(0.4f, 0f, 100);
                             await System.Threading.Tasks.Task.Delay(250);
                         }

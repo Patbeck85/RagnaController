@@ -6,9 +6,9 @@ namespace RagnaController.Core
     public class MageEngine
     {
         [DllImport("user32.dll")] private static extern IntPtr GetCursor();
-        private int _cc, _dc, _cw;
-        private bool _pr3, _pl1, _al1, _ar1, _al2, _ar2, _cal;
-        private IntPtr _nc = IntPtr.Zero;
+        private int _castCooldown, _defensiveCooldown, _cursorWarmup;
+        private bool _prevR3, _prevL1, _aimL1, _aimR1, _aimL2, _aimR2, _cursorCalibrated;
+        private IntPtr _normalCursor = IntPtr.Zero;
 
         public bool MageEnabled { get; set; }
         public int MageBoltKeyVK { get; set; } = 86;
@@ -26,37 +26,37 @@ namespace RagnaController.Core
         public event Action<MagePhase>? PhaseChanged;
 
         public void ToggleMageMode() { IsActive = !IsActive; if (!IsActive) { SetPhase(MagePhase.Idle); Mode = MageMode.Idle; GroundAimHeld = false; CastCount = 0; } }
-        public void RecalibrateCursor() { _cal = false; _nc = IntPtr.Zero; }
+        public void RecalibrateCursor() { _cursorCalibrated = false; _normalCursor = IntPtr.Zero; }
 
-        public void EnterGroundAim(bool l2, bool r2, bool l1, bool r1) { if (!IsActive) return; GroundAimHeld = true; _al2 = l2; _ar2 = r2; _al1 = l1; _ar1 = r1; Mode = MageMode.Ground; _cw = 120; SetPhase(MagePhase.GroundAiming); }
+        public void EnterGroundAim(bool l2, bool r2, bool l1, bool r1) { if (!IsActive) return; GroundAimHeld = true; _aimL2 = l2; _aimR2 = r2; _aimL1 = l1; _aimR1 = r1; Mode = MageMode.Ground; _cursorWarmup = 120; SetPhase(MagePhase.GroundAiming); }
 
         public bool Update(float rx, float ry, bool r3, bool r2, bool l2, bool l1, bool r1, int ms)
         {
             if (!IsActive) return false;
             IntPtr c = GetCursor();
-            if (!_cal) { _nc = c; _cal = true; } else if (_cw > 0) _cw -= ms; else GroundSpellPending = (c != _nc && c != IntPtr.Zero);
-            _cc = Math.Max(0, _cc - ms); _dc = Math.Max(0, _dc - ms);
+            if (!_cursorCalibrated) { _normalCursor = c; _cursorCalibrated = true; } else if (_cursorWarmup > 0) _cursorWarmup -= ms; else GroundSpellPending = (c != _normalCursor && c != IntPtr.Zero);
+            _castCooldown = Math.Max(0, _castCooldown - ms); _defensiveCooldown = Math.Max(0, _defensiveCooldown - ms);
 
-            if (l1 && !_pl1 && _dc <= 0) { InputSimulator.TapKey((VirtualKey)DefensiveKeyVK); _dc = DefensiveCooldownMs; CastCount++; }
-            _pl1 = l1;
+            if (l1 && !_prevL1 && _defensiveCooldown <= 0) { InputSimulator.TapKey((VirtualKey)DefensiveKeyVK); _defensiveCooldown = DefensiveCooldownMs; CastCount++; }
+            _prevL1 = l1;
 
             if (GroundAimHeld)
             {
-                if ((_al2 && !l2) || (_ar2 && !r2) || (_al1 && !l1) || (_ar1 && !r1)) { InputSimulator.LeftClick(); _cc = 800; GroundAimHeld = false; CastCount++; SetPhase(MagePhase.Casting); Mode = MageMode.Idle; return false; }
-                if (r3 && !_pr3) { InputSimulator.TapKey(VirtualKey.Escape); GroundAimHeld = false; SetPhase(MagePhase.Idle); Mode = MageMode.Idle; return false; }
-                Move(rx, ry, 18f * (r1 ? 0.5f : 1.0f), 0.15f); _pr3 = r3; return true;
+                if ((_aimL2 && !l2) || (_aimR2 && !r2) || (_aimL1 && !l1) || (_aimR1 && !r1)) { InputSimulator.LeftClick(); _castCooldown = 800; GroundAimHeld = false; CastCount++; SetPhase(MagePhase.Casting); Mode = MageMode.Idle; return false; }
+                if (r3 && !_prevR3) { InputSimulator.TapKey(VirtualKey.Escape); GroundAimHeld = false; SetPhase(MagePhase.Idle); Mode = MageMode.Idle; return false; }
+                Move(rx, ry, 18f * (r1 ? 0.5f : 1.0f), 0.15f); _prevR3 = r3; return true;
             }
 
-            if (Phase == MagePhase.Casting) { if (_cc <= 0) SetPhase(MagePhase.Idle); return false; }
-            if (r2 && !_ar2)
+            if (Phase == MagePhase.Casting) { if (_castCooldown <= 0) SetPhase(MagePhase.Idle); return false; }
+            if (r2 && !_aimR2)
             {
                 Mode = MageMode.Bolt; Move(rx, ry, BoltAimSensitivity, 0.15f);
-                if (r3 && !_pr3) SetPhase(MagePhase.BoltLocked);
+                if (r3 && !_prevR3) SetPhase(MagePhase.BoltLocked);
                 if (Phase == MagePhase.BoltLocked) SetPhase(MagePhase.BoltSpamming);
-                if (Phase == MagePhase.BoltSpamming && _cc <= 0) { InputSimulator.TapKey((VirtualKey)MageBoltKeyVK); _cc = MageBoltCastDelayMs; CastCount++; }
+                if (Phase == MagePhase.BoltSpamming && _castCooldown <= 0) { InputSimulator.TapKey((VirtualKey)MageBoltKeyVK); _castCooldown = MageBoltCastDelayMs; CastCount++; }
             }
             else if (!r2 && Mode == MageMode.Bolt) { SetPhase(MagePhase.Idle); Mode = MageMode.Idle; }
-            _pr3 = r3; return false;
+            _prevR3 = r3; return false;
         }
 
         private void Move(float rx, float ry, float s, float dz) { float sq = rx * rx + ry * ry; if (sq <= dz * dz) return; float m = MathF.Sqrt(sq); int mx = (int)(rx / m * ((m - dz) / (1f - dz)) * s), my = (int)(-ry / m * ((m - dz) / (1f - dz)) * s); if (mx != 0 || my != 0) InputSimulator.MoveMouseRelative(mx, my); }

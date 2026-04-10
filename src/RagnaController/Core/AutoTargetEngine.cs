@@ -91,7 +91,7 @@ namespace RagnaController.Core
             // Fire-and-forget mit Semaphore — kein async void race condition
             Task.Run(async () =>
             {
-                if (!await _skillSem.WaitAsync(0)) return; // skip if another skill is already in flight
+                if (!await _skillSem.WaitAsync(50)) return; // wait up to 50ms; drop if engine is still busy
                 try
                 {
                     // 1. Save current cursor position

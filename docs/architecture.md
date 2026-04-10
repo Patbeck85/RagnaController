@@ -1,132 +1,189 @@
-# RagnaController — Architecture (v1.2.0)
+# RagnaController — Architecture
 
 ## System Overview
 
-```text
+```
 EXE startup
     │
-    └── App.xaml.cs: ShowSplashThenMain()
+    └── App.xaml.cs: StartWorkflow()
            │
-           ├── SplashWindow (3 s animated)
+           ├── SplashWindow (3 s animated intro)
            │
-           └── MainWindow
+           └── MainWindow (Obsidian & Gold UI)
                   │
-                  ├── HybridEngine  ←──────────────── 125 Hz DispatcherTimer (Priority: Input)
+                  ├── HybridEngine  ←──────────────── 125 Hz DispatcherTimer (1 ms precision)
                   │     │
-                  │     ├── ControllerService   (XInput poll + WMI detect)
-                  │     ├── MovementEngine      (Left stick → SendInput click)
-                  │     ├── CursorEngine        (Right stick → Mouse move)
-                  │     ├── CombatEngine        (Button mapping · Turbo · Macro)
-                  │     ├── ComboEngine         (Sequential Skill Chains & Timings)
-                  │     ├── AutoTargetEngine    (Melee FSM)
-                  │     ├── KiteEngine          (Ranged FSM)
-                  │     ├── MageEngine          (Mage FSM)
-                  │     ├── SupportEngine       (Support FSM)
-                  │     ├── FeedbackSystem      (Rumble + SystemSounds)
-                  │     └── AdvancedLogger      (Tick metrics + File log)
+                  │     ├── ControllerService    (XInput poll + WMI brand detection)
+                  │     ├── MovementEngine       (left stick → SendInput click, DPI-aware centre)
+                  │     ├── CursorEngine         (right stick → smooth mouse move)
+                  │     ├── CombatEngine         (5-layer input · turbo · macro playback)
+                  │     ├── ComboEngine          (class-aware sequential skill chains)
+                  │     ├── AutoTargetEngine     (Melee FSM + Smart Skill cursor juggling)
+                  │     ├── KiteEngine           (Ranged 5-phase FSM)
+                  │     ├── MageEngine           (ground-target / bolt mode FSM)
+                  │     ├── SupportEngine        (heal / party cycle / ground mode FSM)
+                  │     ├── VoiceChatService     (System.Speech recognition → chat string)
+                  │     ├── WindowSwitcher       (Win32 AttachThreadInput, background thread)
+                  │     ├── WindowTracker        (GetClientRect + GetDpiForMonitor → physical centre)
+                  │     ├── FeedbackSystem       (rumble patterns + SystemSounds)
+                  │     └── AdvancedLogger       (tick metrics + ring buffer log)
                   │
-                  ├── Global hotkeys   (Win32 RegisterHotKey / WM_HOTKEY)
-                  ├── RadialMenuWindow (Built-in high-res Emotes & Item Wheel)
-                  ├── DaisyWheelWindow (Circular On-Screen Keyboard)
-                  ├── ProfileManager   (39 built-ins + user JSON overrides)
-                  └── Settings         (JSON stored in %AppData%)
-Tick Loop (HybridEngine.OnTick — 8 ms)
-The entire input loop is wrapped in a secure try-catch block to prevent Windows, broken USB packets, or Anti-Cheat software from crashing the application.
-code
-Text
-1.  ControllerService.GetGamepad()         ← SharpDX XInput poll.
-2.  Hardware Sanity Check                  ← Drop frame if impossible inputs detected (e.g., Up+Down).
-3.  If no gamepad → AutoStop()             ← Shuts down engines safely, waits for reconnection.
-4.  Battery Check                          ← Fires every ~10s. Reports "WIRED" for USB connections.
-5.  Read Modifier Flags                    ← Evaluates L1, R1, L2, R2 states.
-6.  Pro Shortcuts                          ← Checks for Loot Vacuum (L1+R1), Panic Heal (L3+R3).
-7.  Overlay Triggers                       ← Checks for Daisy Wheel (Back+R1) or Radial Menu (L2+R2).
-8.  Left Stick                             ← Passed to MovementEngine.Update().
-9.  Right Stick                            ← Passed to active special engine OR CursorEngine.Update().
-10. AutoTargetEngine.Update()              ← Evaluates tab-targeting and auto-attacks.
-11. CombatEngine.ProcessButton()           ← Resolves 5-layer mappings for pushed face buttons.
-12. UI Update                              ← UI Snapshot updated every 4th tick (~30 FPS) to prevent WPF UI freezes.
-Asynchronous Anti-Freeze Input Pipeline (InputSimulator.cs)
-To prevent user32.dll SendInput from freezing the 125Hz Tick Loop when Anti-Cheat systems (like Gepard Shield) or Windows User Interface Privilege Isolation (UIPI) hook into Windows APIs, all physical outputs are detached into background tasks.
-code
-C#
-// Example from InputSimulator.cs
-public static void MoveMouseRelative(int dx, int dy) 
-{ 
-    // Frame-Drop Logic: If the previous command is still blocked by the OS, 
-    // skip this frame to keep the Controller Tick Loop alive and responsive.
-    if (_mouseMoveInFlight) return; 
-    
-    _mouseMoveInFlight = true;
-    Task.Run(() => 
-    {
-        try { SendInput(...); } finally { _mouseMoveInFlight = false; }
-    });
-}
-Input Layer Resolution (CombatEngine.cs)
-Inputs are resolved sequentially based on active modifier holds:
-code
-Text
+                  ├── Overlay Windows     (RadialMenuWindow, DaisyWheelWindow, MiniModeWindow)
+                  ├── ProfileManager      (39 built-ins + user JSON, bak recovery)
+                  └── Settings            (AppData JSON persistence, FocusLockProcess)
+```
+
+---
+
+## Tick Loop (`HybridEngine.OnTick` — 8 ms / 125 Hz)
+
+```
+1.  Poll gamepad              ← ControllerService.GetGamepad() via SharpDX XInput
+2.  Battery check             → every ~10 s → BatteryChanged event
+3.  Focus Lock + WindowTracker → every ~500 ms:
+        a. WindowTracker.Refresh()  → foreground-first process scan
+        b. MovementEngine.SetCenter()  → DPI-corrected client centre
+        c. IsFocusLocked check  → suppress all input if RO not foreground
+4.  If FocusLocked → return early (no input passes through)
+5.  Read modifiers            ← L1, R1, L2 (>50), R2 (>50)
+6.  Global overlays:
+        Back + R1 → DaisyWheelWindow.Show()
+        Back + L1 → VoiceChatService.StartListening()
+        LT + RT   → RadialMenuWindow.Reopen() or .ExecuteAndClose()
+7.  Pro triggers:
+        L3 + R3   → Panic heal (F4 × 10)
+        LB + RB   → Loot vacuum (throttled 50 ms/click)
+8.  Left stick  → MovementEngine.Update()
+9.  Engine routing → right stick to active FSM or CursorEngine
+10. ComboEngine.Tick()
+11. CombatEngine.ProcessButton() for each changed button flag
+12. Window switch (ActionType.SwitchWindow) → Task.Run background
+13. SnapshotUpdated event → MainWindow UI refresh
+14. AdvancedLogger.LogPerformance() → warn if tick > 25 ms
+```
+
+---
+
+## WindowTracker Resolution
+
+```
+OnTick every ~500 ms
+    │
+    ├── GetForegroundWindow()
+    │       └── GetWindowThreadProcessId() + Process.GetProcessById()
+    │               └── ProcessName contains FocusLockProcess?
+    │                       YES → use this HWND  (multi-client: always tracks active window)
+    │                       NO  → fall through to process scan
+    │
+    └── Process.GetProcesses() scan
+            └── first match with ProcessName + MainWindowHandle
+                    └── UpdateGeometry(HWND):
+                            GetClientRect()    → logical client dimensions
+                            ClientToScreen()   → physical screen origin
+                            MonitorFromWindow() → which monitor
+                            GetDpiForMonitor() → dpiX (e.g. 144 at 150%)
+                            scale = dpiX / 96
+                            CenterX = origin.X × scale + (clientW × scale) / 2
+                            CenterY = origin.Y × scale + (clientH × scale) / 2
+```
+
+---
+
+## Smart Skill Auto-Aim (Cursor Juggling)
+
+```
+AutoTargetEngine.OnTick()
+    └── target locked → saves _lockPos (screen coords) every tick
+
+CombatEngine.ProcessButton() → ActionType.Key
+    └── HybridEngine intercepts if AutoTarget active + target locked
+            └── Task.Run (SemaphoreSlim guard):
+                    1. GetCursorPos() → save walkPos
+                    2. SetCursorPos(_lockPos)
+                    3. TapKey(skill) + LeftClick
+                    4. SetCursorPos(walkPos)
+                    Total: ~12 ms
+```
+
+---
+
+## Input Layer Resolution
+
+```
 Button pressed
     │
-    ├─ L1 held? → Look up "L1+{button}" in profile.ButtonMappings
-    ├─ R1 held? → Look up "R1+{button}"
-    ├─ L2 held? → Look up "L2+{button}"
-    ├─ R2 held? → Look up "R2+{button}"
-    └─ none     → Look up "{button}"          ← Base layer
+    ├─ L1 held → look up "L1+{button}"
+    ├─ R1 held → look up "R1+{button}"
+    ├─ L2 held → look up "L2+{button}"
+    ├─ R2 held → look up "R2+{button}"
+    └─ none    → look up "{button}"  (base layer)
 
-Special Base-Layer Overrides (Handled before CombatEngine):
-    X (no modifier) = Alt hold       — Toggles ground items
-    R3 (no modifier) = DoubleClick   — Suppressed if Mage/Support active
-    START + D-Pad = Profile Switch   — Shifts profile index +1 / -1
-Engine Activation Rules
-code
-Text
-L3 (Left Stick Click) Pressed
-    │
-    ├─ SupportEnabled && !support.IsActive  → ToggleSupportMode()
-    ├─ MageEnabled    && !mage.IsActive     → ToggleMageMode()
-    ├─ KiteEnabled    && !kite.IsActive     → ToggleKiteMode()
-    └─ else                                 → ToggleAutoTarget()
+Fixed overrides (before CombatEngine):
+    X (no modifier)     → Alt hold
+    R3 (no modifier)    → DoubleClick
+    Start + DPad        → ProfileQuickSwitch
+    Start + Back        → RestoreMainWindowRequested
+    Back + L1           → VoiceChat
+    Back + R1           → DaisyWheel
+```
 
-Right Stick Ownership:
-    Support.IsActive  → Owned by SupportEngine (Ally aiming)
-    Mage.IsActive     → Owned by MageEngine (Ground spell targeting)
-    Kite.IsActive     → Owned by KiteEngine (Retreat calculations)
-    Radial is Open    → Owned by RadialMenu (Sector highlighting)
-    AutoTarget active → Shared (Directional Snap Aim)
-    none              → Owned by CursorEngine (Free mouse movement)
-Controller Detection Flow (ControllerService.cs)
-To accurately display the brand badge (Xbox vs PlayStation) despite wrapper tools like DS4Windows masking the input protocol, RagnaController uses a WMI hardware query.
-code
-Text
-ControllerService.DetectController()
-    │
-    └── Try XInput slots 0–3
-           │
-           └── If connected:
-                  │
-                  └── DetectControllerType() ← WMI query Win32_PnPEntity
-                         │
-                         ├── Contains VID_054C + PID_0CE6/0DF2 → "PS5"
-                         ├── Contains VID_054C + PID_05C4/09CC → "PS4"
-                         ├── Contains VID_057E + PID_2009      → "Switch"
-                         ├── Contains VID_2DC8                 → "8BitDo"
-                         ├── Contains VID_046D                 → "Logitech"
-                         └── fallback                          → "Xbox"
-Startup Sequence (App.xaml.cs & MainWindow.xaml.cs)
-code
-Text
-1. App.OnStartup()        ← Global exception handlers attached.
-2. StartWorkflow()        ← Async startup wrapper.
-3. SplashWindow.Show()    ← 3-second visual display.
-4. Voice Synthesis        ← Triggers "Ragna Controller" voice greeting.
-5. MainWindow.Init()
-      ├── RegisterGlobalHotkeys()
-      ├── SubscribeEngineEvents()
-      ├── PopulateProfiles()
-      ├── ApplySettings()
-      ├── if AutoStart → _engine.Start()
-      ├── if StartInMiniMode → SwitchToMiniMode()
-      └── CheckForUpdatesAsync() (Fires silently in background)
-6. Splash.FadeAndClose()  ← Graceful transition to MainWindow.
+---
+
+## Input Flow & Win32 Interop
+
+```
+Physical controller press
+    ↓
+Windows XInput driver
+    ↓
+SharpDX.XInput (GetState)
+    ↓
+HybridEngine.OnTick()
+    ↓
+[Focus Lock check — if locked, stop here]
+    ↓
+CombatEngine → resolves L1+A to VirtualKey.F1
+    ↓
+InputSimulator.TapKey / SendInput
+    (INPUT struct: LayoutKind.Explicit, FieldOffset(8) for 64-bit alignment)
+    ↓
+Windows input queue
+    ↓
+Ragnarok Online process (ragexe.exe)
+```
+
+*UIPI note:* If RO runs elevated (e.g. Gepard Shield), `SendInput` from a lower-privileged process is blocked. RagnaController shows an orange admin warning banner on startup.
+
+---
+
+## Profile Storage
+
+| Type | Location | Notes |
+|---|---|---|
+| Built-in profiles | Compiled into exe | 39 classes, read-only |
+| User overrides | `%AppData%\RagnaController\Profiles\*.json` | Written on save |
+| Backups | `*.bak.json` (same folder) | Restored automatically if primary is corrupt |
+| Macros | `%AppData%\RagnaController\Macros\*.json` | Saved by MacroRecorder |
+| Settings | `%AppData%\RagnaController\settings.json` | Saved on every change |
+| Share codes | `%AppData%\RagnaController\share_codes.json` | Gist ID cache |
+| Session logs | `%LocalAppData%\RagnaController\Logs\` | Written during session |
+
+---
+
+## Key Files
+
+| File | Responsibility |
+|---|---|
+| `App.xaml.cs` | Startup, splash, global Obsidian/Gold styles |
+| `MainWindow.xaml.cs` | Main UI, engine wiring, admin check, tab active state |
+| `Core/HybridEngine.cs` | 125 Hz tick loop, Focus Lock, WindowTracker integration, multimedia timer |
+| `Core/WindowTracker.cs` | DPI-aware window geometry — foreground-first for multi-client |
+| `Core/CombatEngine.cs` | 5-layer button mapping, turbo, macro playback, window switch |
+| `Core/AutoTargetEngine.cs` | Melee FSM + Smart Skill cursor juggling |
+| `Core/InputSimulator.cs` | `SendInput` P/Invoke (64-bit aligned struct, chat serialisation) |
+| `Core/FeedbackSystem.cs` | Rumble patterns with pause-aware cancellation |
+| `Core/VoiceChatService.cs` | Local speech-to-text integration |
+| `Core/WindowSwitcher.cs` | Win32 focus management (background thread) |
+| `Core/UpdateChecker.cs` | GitHub releases API check |
+| `Profiles/ProfileManager.cs` | 39 built-ins, user JSON, duplicate protection, bak recovery |
+| `Models/Settings.cs` | App settings with JSON persistence, FocusLockProcess |

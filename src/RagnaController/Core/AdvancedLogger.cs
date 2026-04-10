@@ -38,7 +38,7 @@ namespace RagnaController.Core
 
         public string? LogPerformance(string o, long t) {
             lock (_l) { _smp[_ti] = t; _ti = (_ti + 1) % 1000; if (_tc < 1000) _tc++; }
-            if (t > 80000) { string w = $"{o} took {t / 10000.0:F2}ms"; Log(LogLevel.Warning, "Perf", w); return w; }
+            if (t > 250000) { string w = $"{o} took {t / 10000.0:F2}ms"; Log(LogLevel.Warning, "Perf", w); return w; }
             return null;
         }
 

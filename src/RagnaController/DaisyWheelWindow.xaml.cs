@@ -166,7 +166,7 @@ namespace RagnaController
             float mag = MathF.Sqrt(lx * lx + ly * ly);
             if (mag > 0.30f)
             {
-                double angle = (Math.Atan2(ly, lx) * 180.0 / Math.PI + 360.0 + 90.0) % 360.0;
+                double angle = (Math.Atan2(-ly, lx) * 180.0 / Math.PI + 450.0) % 360.0;
                 _activeSector = (int)(angle / 45.0) % 8;
             }
             else

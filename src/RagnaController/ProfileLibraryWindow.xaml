@@ -66,8 +66,9 @@
                                             </StackPanel>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="15,0,0,0">
-                                            <Button Content="Load" Width="85" Height="32" Margin="0,0,0,8" Style="{StaticResource ConsolePrimaryBtn}" Click="BtnLoad_Click" Tag="{Binding}"/>
-                                            <Button Content="Export" Width="85" Height="32" Margin="0,0,0,8" Style="{StaticResource ConsoleGhostBtn}" Click="BtnExport_Click" Tag="{Binding}"/>
+                                            <Button Content="Load"   Width="85" Height="32" Margin="0,0,0,8" Style="{StaticResource ConsolePrimaryBtn}" Click="BtnLoad_Click"   Tag="{Binding}"/>
+                                            <Button Content="Export" Width="85" Height="32" Margin="0,0,0,8" Style="{StaticResource ConsoleGhostBtn}"  Click="BtnExport_Click" Tag="{Binding}"/>
+                                            <Button Content="↑ Share" Width="85" Height="32" Margin="0,0,0,8" Style="{StaticResource ConsoleGhostBtn}" Click="BtnShare_Click"  Tag="{Binding}" ToolTip="Upload to GitHub Gist and get a share code"/>
                                             <Button Content="Delete" Width="85" Height="32" Style="{StaticResource ConsoleDangerBtn}" Click="BtnDelete_Click" Tag="{Binding}" Visibility="{Binding IsBuiltIn, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                                         </StackPanel>
                                     </Grid>
@@ -81,6 +82,10 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0">
                     <Button Content="New Profile" Style="{StaticResource ConsolePrimaryBtn}" Width="110" Height="36" Margin="0,0,10,0" Click="BtnNew_Click"/>
                     <Button Content="Import" Style="{StaticResource ConsoleGhostBtn}" Width="90" Height="36" Margin="0,0,10,0" Click="BtnImport_Click"/>
+                    <Border Background="#121620" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="6" Margin="0,0,6,0" Height="36">
+                        <TextBox x:Name="TxtShareCode" Width="90" Background="Transparent" Foreground="#F0F4F8" BorderThickness="0" Padding="8,0" FontFamily="Consolas" FontSize="13" VerticalContentAlignment="Center" ToolTip="Enter a share code (e.g. GX-A3F9) and click ↓ Download"/>
+                    </Border>
+                    <Button Content="↓ Download" Style="{StaticResource ConsoleGhostBtn}" Width="100" Height="36" Margin="0,0,10,0" Click="BtnDownload_Click" ToolTip="Download profile by share code"/>
                     <Button Content="Close" Style="{StaticResource ConsoleGhostBtn}" Width="80" Height="36" Click="BtnClose_Click"/>
                 </StackPanel>
             </Border>

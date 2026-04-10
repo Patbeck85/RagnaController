@@ -17,4 +17,5 @@
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/> <!-- Windows 10/11 -->
     </application>
   </compatibility>
+
 </assembly>

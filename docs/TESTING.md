@@ -1,156 +1,132 @@
-# RagnaController — Testing Checklist (v1.2.0)
+# RagnaController — Release Testing Checklist v1.2.0
 
-Use this document before every release to ensure maximum stability. Check off each item manually.
-
----
-
-## 0. Build Verification
-
-- [ ] Run `START.bat` and select `[4] Build All`.
-- [ ] Verify that the script successfully downloads the .NET 8 SDK (if missing).
-- [ ] Verify that 3 ZIP files are generated in the `publish/` folder with the correct version number (e.g., `RagnaController_v1.2.0_Win_Standalone.zip`).
-- [ ] Extract the `Win_Standalone` zip and launch the EXE without .NET installed on the machine.
-- [ ] Splash screen appears for ~3 seconds, then fades out smoothly.
-- [ ] MainWindow opens and shows "NO CONTROLLER" state correctly (if no gamepad is connected).
+Run through every section before tagging a release. Check off each item manually.
 
 ---
 
-## 1. Controller Detection & Hardware Sanity
+## 1. Build & Startup
 
-**Xbox controller:**
-- [ ] Plug in → badge shows **XBOX** (green).
-- [ ] Unplug → badge shows **NO CONTROLLER** (grey) within ~2 seconds.
-- [ ] Reconnect → badge shows **XBOX** again and engine resumes if AutoStart was enabled.
-
-**PS4/PS5 (via DS4Windows in XInput mode):**
-- [ ] Badge shows **PS4** or **PS5** (blue).
-
-**Battery display:**
-- [ ] Wired controller → 🔌 WIRED in header (Full green bar).
-- [ ] Wireless full → 🔋 FULL (green).
-- [ ] Wireless low → ⚠ LOW (red).
-
-**Hardware Sanity Check (Freeze Protection):**
-- [ ] Connect a controller. Attempt to press D-Pad UP and D-Pad DOWN simultaneously (or use software to send this signal). The UI should ignore the impossible input gracefully and **not freeze**.
+- [ ] `build.bat` completes without errors or warnings (target: option 1 — Framework-dependent)
+- [ ] App launches and splash screen plays (gold pulse, fades into MainWindow)
+- [ ] Admin warning banner appears if launched **without** admin rights
+- [ ] Version number in title bar reads `1.2.0`
+- [ ] No unhandled exception on cold start (fresh AppData)
 
 ---
 
-## 2. Movement & Cursor Engines
+## 2. Focus Lock
 
-- [ ] **Left Stick (Movement):** Pushing stick → character walks toward cursor position.
-- [ ] **Release stick:** Character stops (with coast frames if configured).
-- [ ] **Action RPG Mode ON:** Holding stick holds the click continuously.
-- [ ] **Action RPG Mode OFF:** Each new direction fires a fresh click.
-- [ ] **Right Stick (Cursor):** Moves cursor smoothly. Stops completely when stick centers (no drift with default deadzone).
-- [ ] **Precision Mode:** Press SELECT → PRECISION badge appears in header. Cursor is noticeably slower (÷3). Press SELECT again to restore speed.
-
----
-
-## 3. Layer System
-
-For each layer, hold the modifier and verify all 4 face buttons fire correct keys (checked via Notepad or the Macro window):
-
-| Hold | Press | Expected key |
-|---|---|---|
-| (none) | X | Hold Alt |
-| L1 | A | F1 |
-| R1 | B | F6 |
-| L2 | X | F11 |
-| R2 | Y | Ctrl+F4 |
-
-- [ ] Layer badge in header (bottom right) updates when modifier is held (e.g., "L1+" / "R1+").
-- [ ] Releasing modifier → badge returns to BASE.
-- [ ] START + D-Pad ↑ → next profile selected.
-- [ ] START + D-Pad ↓ → previous profile selected (wraps around).
+- [ ] Settings → Focus Lock checkbox is checked by default
+- [ ] Browse button opens `.exe` file picker; selecting `ragexe.exe` sets field to `ragexe`
+- [ ] Save settings; start engine; alt-tab to Notepad — status bar shows `⛔ FOCUS LOCK — switch to RO` in orange
+- [ ] Controller input does **not** type or move mouse while locked
+- [ ] Alt-tab back to RO — engine resumes within 500 ms, orange indicator clears
+- [ ] Uncheck Focus Lock in settings → engine runs regardless of foreground window
 
 ---
 
-## 4. Advanced Pro Features
+## 3. Visual Deadzone Ring
 
-- [ ] **Radial Menu (L2+R2):** Hold triggers, verify radial UI appears instantly (Emotes are now built-in, no download needed!). Right stick highlights emojis. Release triggers to close and send the command to chat.
-- [ ] **Loot Vacuum (L1+R1):** Hold bumpers, verify cursor spirals around the center rapidly while spamming Left-Click.
-- [ ] **Panic Heal (L3+R3):** Click both sticks, verify a strong rumble is felt and log shows "PANIC" execution.
-- [ ] **Daisy Wheel (Back+R1):** Press Select and Right Bumper to open the circular keyboard. Input text using A/B/X/Y and close with Start.
-
----
-
-## 5. Combat Engines
-
-- **AutoTarget (Melee):**
-  - [ ] L3 press → engine activates (status badge shows "MELEE").
-  - [ ] Tabs to target, right clicks to lock.
-  - [ ] Fires attack key at configured interval.
-- **Kite (Ranged):**
-  - [ ] L3 press (KiteEnabled profile) → engine activates.
-  - [ ] Cycle: Lock → Attack → Retreat → Pivot → Relock.
-  - [ ] Hold R2 during Attack → stays and continues attacking (skips retreat).
-  - [ ] Press L2 during Attack → triggers immediate retreat.
-- **Mage:**
-  - [ ] L3 press (MageEnabled profile) → engine activates.
-  - [ ] Right stick aims → R3 places ground AoE.
-  - [ ] Hold R2 → locks target and fires bolt.
-  - [ ] Hold L2 → fires defensive key (with cooldown).
-- **Support:**
-  - [ ] L3 press (SupportEnabled profile) → engine activates.
-  - [ ] Right stick aims at ally → R3 snaps + heals.
-  - [ ] L3 again (while active) → self-heal fires.
-  - [ ] R1 → Tab to next party member.
+- [ ] Both L-STICK and R-STICK visualisers show a red semi-transparent ring
+- [ ] Moving the Deadzone slider → ring resizes live
+- [ ] Double-clicking the `STICK DEADZONE` label resets slider **and** ring size
+- [ ] Load a different profile → ring updates to that profile's deadzone value
 
 ---
 
-## 6. Turbo & Macro System
+## 4. Window Tracking & DPI
 
-**Turbo System:**
-- [ ] Standard: hold button → key fires repeatedly at fixed rate.
-- [ ] Burst: first press fires 3 rapid shots, then settles to normal rate.
-- [ ] Turbo stops immediately on button release.
-
-**Macro Recorder:**
-- [ ] Open Macro window → click Record → press 3–4 keys → click Stop.
-- [ ] Steps list shows recorded keys with timings.
-- [ ] Click Save → file created in `%AppData%\RagnaController\Macros\`.
-- [ ] Load saved macro → play once → all keys fire in correct order.
-- [ ] Open macro in Editor → can add/delete/reorder steps.
-- [ ] Optimize removes delays < 30 ms safely without deleting keypresses.
+- [ ] Start engine with RO open → tick-latency field shows `X.Xms | RO 1.00x DPI` (or correct scale)
+- [ ] Move RO window to a different monitor → within 500 ms DPI label updates
+- [ ] Analog movement cursor lands on character, not offset from it
+- [ ] With RO not running → tick field shows `X.Xms | RO: not found`
 
 ---
 
-## 7. Profile Library & Wizard
+## 5. Multi-Client Window Switch
 
-- [ ] Open Profile Library → all 39 built-in profiles listed.
-- [ ] Search by name filters list in real time.
-- [ ] Export profile → JSON file saved.
-- [ ] Import JSON → profile appears in list.
-- [ ] Open Wizard → 4 steps progress correctly.
-- [ ] Created wizard profile appears in combobox and can be loaded.
+- [ ] Open two RO clients; map a button to `Switch Window`; press it → second client comes to front
+- [ ] Press again → first client comes to front
+- [ ] After each switch, within ~500 ms, cursor movement centres correctly on the active client
+- [ ] Switching while on a 4K monitor does **not** cause cursor drift
 
 ---
 
-## 8. Stability & Anti-Freeze Protection (v1.2.0 Core Test)
+## 6. Mini-Mode & Click-Through Trap
 
-- [ ] Move mouse wildly with the right stick while RO (or any admin-level game/app) is open. **No freezing should occur.** (Asynchronous `SendInput` test).
-- [ ] Switch to a different app (e.g., Discord). The controller should remain active and responsive (Focus Lock was removed by design to support renamed RO executables).
-- [ ] Open Settings, change "Log Level" to Debug, check the "Log" tab. Ensure no exceptions are spammed while the controller is idle.
-
----
-
-## 9. UI Shell & Mini Mode
-
-- [ ] **Mini Mode:** Click `Mini` button → Mini Mode overlay appears (280×120 px), main window hides.
-- [ ] Start/stop engine → overlay color updates in real time.
-- [ ] **Mini Mode Close Fix:** Click the `X` on the mini overlay → it cleanly closes the overlay and restores the Main Window.
-- [ ] Move window to corner → close app → reopen → window at same position.
-- [ ] Click minimize (—) → app disappears from screen, tray icon visible.
-- [ ] Double-click tray icon → app restored and focused.
+- [ ] Click `Mini` button → compact overlay appears, main window hides
+- [ ] Right-click overlay → border turns blue, window becomes click-through
+- [ ] Press `Start + Back` on controller → main window restores, click-through deactivated
+- [ ] Tooltip on Mini overlay reads: *"Right-click: toggle click-through... Press Start+Back..."*
 
 ---
 
-## 10. Final Performance Checklist
+## 7. Analog Movement & Combat
 
-Open Task Manager while running the app and actively using the controller:
+- [ ] Left stick moves character smoothly; no stuttering at low deflection
+- [ ] Deadzone ring visually matches the physical dead zone of the stick
+- [ ] `L3` activates Melee engine; `L3` again deactivates
+- [ ] With target locked, pressing a skill button snaps cursor to target and back (Smart Skill)
+- [ ] `LB + RB` → Loot vacuum spirals cursor and clicks approximately every 50 ms
+- [ ] `L3 + R3` → Panic heal fires F4 multiple times
 
-- [ ] CPU usage < 5% with engine running.
-- [ ] Memory < 120 MB.
-- [ ] No memory growth over 5 minutes (no memory leak in the 8ms tick loop).
-- [ ] Log tab shows `avg tick < 2 ms`, `max tick < 8 ms`.
-- [ ] Zero crashes during a 10-minute active play session.
+---
+
+## 8. Voice-to-Chat
+
+- [ ] Press `Back + L1` → microphone activates
+- [ ] Speak a short phrase → text is typed into RO chat and submitted
+- [ ] Rapid double-press does **not** produce interleaved characters in chat
+
+---
+
+## 9. Daisy Wheel
+
+- [ ] Press `Back + R1` → Daisy Wheel overlay opens
+- [ ] Push stick **UP** → top sector highlights (not bottom — Y-axis inversion fix)
+- [ ] Select a character; press Start → text submitted to RO chat
+- [ ] Press B with no sector selected → wheel closes cleanly
+- [ ] Rapidly press Start twice → no crash
+
+---
+
+## 10. Radial Emote Menu
+
+- [ ] Hold `LT + RT` → radial menu opens
+- [ ] Point right stick → correct sector highlights
+- [ ] Release triggers → emote command sent to RO chat
+- [ ] Rapidly hold/release triggers 10× in quick succession → no flicker, no crash
+- [ ] Run `GetEmotes.ps1` → emote images appear in overlay
+
+---
+
+## 11. Profile System
+
+- [ ] Import a `.json` profile with the same name as an existing one → replaces it, not duplicated
+- [ ] Corrupt a profile `.json` (open in editor, delete half the content, save) → app loads the `.bak.json` silently
+- [ ] Profile Wizard → create profile → appears in dropdown immediately
+- [ ] Double-click slider label → value resets to profile default
+
+---
+
+## 12. Settings Persistence
+
+- [ ] Change Focus Lock process name → save → restart app → correct value restored
+- [ ] Change log level to Debug → save → restart app → Debug level active
+- [ ] Window position remembered between restarts
+
+---
+
+## 13. Performance
+
+- [ ] Run for 5 minutes in game; tick latency stays below 5 ms average (visible in Log tab)
+- [ ] No perf warnings in log during normal play (threshold is 25 ms)
+- [ ] CPU usage below 2% while engine is running
+
+---
+
+## 14. Cleanup on Exit
+
+- [ ] Close app with engine running → no stuck keys, no ghost rumble
+- [ ] Close during loot vacuum → no stuck left-click
+- [ ] Close during Voice-to-Chat → microphone released

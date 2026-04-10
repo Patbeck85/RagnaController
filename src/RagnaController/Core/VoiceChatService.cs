@@ -33,8 +33,8 @@ namespace RagnaController.Core
                 _engine.LoadGrammar(new DictationGrammar());
                 _engine.SpeechRecognized        += OnRecognized;
                 _engine.SpeechRecognitionRejected += (s, e) =>
-                    StatusChanged?.Invoke("Nicht verstanden — bitte nochmals sprechen.");
-                StatusChanged?.Invoke("Mikrofon bereit.");
+                    StatusChanged?.Invoke("Not understood — please speak again.");
+                StatusChanged?.Invoke("Microphone ready.");
             }
             catch (Exception ex)
             {
@@ -48,8 +48,15 @@ namespace RagnaController.Core
             try
             {
                 _isListening = true;
-                _engine.RecognizeAsync(RecognizeMode.Single); // nur eine Aussage
+                _engine.RecognizeAsync(RecognizeMode.Single);
                 StatusChanged?.Invoke("🎤 Listening…");
+
+                // Auto-cancel after 8 seconds — prevents microphone staying open indefinitely
+                System.Threading.Tasks.Task.Run(async () =>
+                {
+                    await System.Threading.Tasks.Task.Delay(8000);
+                    if (_isListening) StopListening();
+                });
             }
             catch { _isListening = false; }
         }
@@ -59,7 +66,7 @@ namespace RagnaController.Core
             if (_engine == null || !_isListening) return;
             try { _engine.RecognizeAsyncCancel(); } catch { }
             _isListening = false;
-            StatusChanged?.Invoke("Mikrofon aus.");
+            StatusChanged?.Invoke("Microphone off.");
         }
 
         private async void OnRecognized(object? sender, SpeechRecognizedEventArgs e)
@@ -67,7 +74,7 @@ namespace RagnaController.Core
             _isListening = false;
             if (e.Result.Confidence < MinConfidence)
             {
-                StatusChanged?.Invoke($"Zu unsicher ({e.Result.Confidence:P0}) – ignoriert.");
+                StatusChanged?.Invoke($"Too uncertain ({e.Result.Confidence:P0}) – ignoriert.");
                 return;
             }
             string text = e.Result.Text;

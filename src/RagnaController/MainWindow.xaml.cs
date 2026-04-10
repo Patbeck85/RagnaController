@@ -28,9 +28,11 @@ namespace RagnaController
         {
             InitializeComponent();
 
+            // --- Admin-Warnung ---
             if (!IsRunningAsAdmin())
                 AdminWarningBanner.Visibility = System.Windows.Visibility.Visible;
 
+            // --- Status ---
             _engine.StatusChanged += (s) => Dispatcher.Invoke(() =>
             {
                 if (StatusText != null)
@@ -40,11 +42,16 @@ namespace RagnaController
                                          : "PAUSED";
                     StatusText.Foreground = s == EngineStatus.Running ? Brushes.Lime : Brushes.OrangeRed;
                 }
+                // Status-Dot + AutoStatusText in Toolbar
                 if (AutoStatusText != null)
                 {
-                    AutoStatusText.Text = s == EngineStatus.Running ? _engine.ControllerName + " — aktiv"
-                                        : s == EngineStatus.Stopped  ? "Pausiert"
-                                        : "Warte auf Controller…";
+                    if (s == EngineStatus.Running)
+                        AutoStatusText.Text = _engine.FocusLockEnabled && _engine.IsFocusLocked
+                            ? "Running — ⛔ switch to RO"
+                            : _engine.ControllerName + " — active";
+                    else
+                        AutoStatusText.Text = s == EngineStatus.Stopped ? "Paused"
+                                                                         : "Waiting for controller…";
                 }
                 if (StatusDot != null)
                 {
@@ -56,11 +63,19 @@ namespace RagnaController
                 if (BtnPause != null)
                 {
                     BtnPause.IsEnabled = s == EngineStatus.Running || s == EngineStatus.Stopped;
-                    BtnPause.Content   = _engine.IsPaused ? "▶ Resume" : "⏸ Pause";
-                    BtnPause.Foreground = _engine.IsPaused ? Brushes.Lime : new SolidColorBrush(Color.FromRgb(139, 148, 158));
+                    bool paused = _engine.IsPaused;
+                    // Update label text — preserves the SVG icon StackPanel structure
+                    if (BtnPauseLabel != null) BtnPauseLabel.Text = paused ? "Resume" : "Pause";
+                    // Swap icon: play triangle for Resume, pause bars for Pause
+                    if (BtnPauseIcon  != null) BtnPauseIcon.Data  = System.Windows.Media.Geometry.Parse(
+                        paused ? "M4 2L13 8L4 14Z" : "M5 2V14M11 2V14");
+                    BtnPause.Foreground = paused
+                        ? System.Windows.Media.Brushes.Lime
+                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(139, 148, 158));
                 }
             });
 
+            // --- Snapshot ---
             _engine.SnapshotUpdated += (snap) => Dispatcher.Invoke(() =>
             {
                 if (_isMiniMode && _miniWindow != null)
@@ -72,17 +87,32 @@ namespace RagnaController
                 if (StatusPanic  != null) { StatusPanic.Text  = snap.PanicActive  ? "🆘 PANIC"    : "◌ PANIC OFF";  StatusPanic.Foreground  = snap.PanicActive  ? Brushes.Red    : Brushes.Gray; }
                 if (StatusVacuum != null) { StatusVacuum.Text = snap.VacuumActive ? "🌀 VACUUM"   : "◌ VACUUM OFF"; StatusVacuum.Foreground = snap.VacuumActive ? Brushes.Cyan   : Brushes.Gray; }
                 if (StatusCombo  != null) { StatusCombo.Text  = snap.ComboActive  ? $"⚡ {snap.ComboLabel}" : "◌ COMBO OFF"; StatusCombo.Foreground = snap.ComboActive ? Brushes.Yellow : Brushes.Gray; }
-                if (TickLatencyText != null) TickLatencyText.Text = snap.TickMs.ToString("F1") + "ms";
-
-                if (AutoStatusText != null && _engine.FocusLockEnabled && _engine.IsFocusLocked)
+                if (TickLatencyText != null)
                 {
-                    AutoStatusText.Text = "⛔ FOCUS LOCK — switch to RO";
-                    if (StatusDot != null) StatusDot.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0x99, 0x00));
+                    string dpiInfo = snap.WindowTracked
+                        ? $" | RO {snap.WindowDpiScale:F2}x DPI"
+                        : " | RO: not found";
+                    TickLatencyText.Text = snap.TickMs.ToString("F1") + "ms" + dpiInfo;
+                }
+
+                // Show FOCUS LOCK status in the status bar — clear when unlocked
+                if (_engine.FocusLockEnabled && _engine.IsFocusLocked)
+                {
+                    if (AutoStatusText != null) AutoStatusText.Text = "⛔ FOCUS LOCK — switch to RO";
+                    if (StatusDot != null) StatusDot.Fill = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(0xFF, 0x99, 0x00));
+                }
+                else if (_engine.IsRunning)
+                {
+                    // Restore normal running state colours if FocusLock just cleared
+                    if (StatusDot != null) StatusDot.Fill = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(0x00, 0xE5, 0x76));
                 }
 
                 if (LeftStickDot  != null) { Canvas.SetLeft(LeftStickDot,  20 + snap.LeftX  * 20); Canvas.SetTop(LeftStickDot,  20 - snap.LeftY  * 20); }
                 if (RightStickDot != null) { Canvas.SetLeft(RightStickDot, 20 + snap.RightX * 20); Canvas.SetTop(RightStickDot, 20 - snap.RightY * 20); }
 
+                // Live controller preview — highlight active layer button
                 if (_livePreview != null)
                 {
                     string h = snap.L1 ? "LeftShoulder" : snap.R1 ? "RightShoulder"
@@ -90,12 +120,13 @@ namespace RagnaController
                     if (h != _lastHighlight)
                     {
                         if (!string.IsNullOrEmpty(h)) _livePreview.HighlightButton(h);
-                        else _livePreview.HighlightButton(""); 
+                        else _livePreview.HighlightButton(""); // clear
                         _lastHighlight = h;
                     }
                 }
             });
 
+            // --- ProfileQuickSwitch (Start+DPad) ---
             _engine.ProfileQuickSwitch += delta => Dispatcher.Invoke(() =>
             {
                 if (_manager.Profiles.Count == 0) return;
@@ -104,6 +135,7 @@ namespace RagnaController
                 ProfileCombo.SelectedItem = _manager.Profiles[next];
             });
 
+            // --- Log-Tab ---
             _engine.LogMessage += msg => Dispatcher.Invoke(() =>
             {
                 if (LogTextBlockTab == null) return;
@@ -113,6 +145,7 @@ namespace RagnaController
                 LogScrollViewer?.ScrollToEnd();
             });
 
+            // --- Voice Status ---
             _engine.VoiceStatusChanged += msg => Dispatcher.Invoke(() =>
             {
                 if (VoiceStatusText != null)
@@ -122,17 +155,15 @@ namespace RagnaController
                         ? Brushes.Lime : new SolidColorBrush(Color.FromRgb(85, 94, 106));
                 }
             });
-
+            // Battery display — visual fill bar in header
             _engine.BatteryChanged += level => Dispatcher.Invoke(() =>
             {
                 if (BatteryFill == null || BatteryLevelText == null) return;
-                
-                // FIX: Added "Wired" and "Medium" states to match XInput properly
                 var (fillWidth, fillColor, label) = level switch
                 {
-                    "Wired" => (24.0, Color.FromRgb( 57, 255,  20), "WIRED"),
                     "Full"  => (22.0, Color.FromRgb( 57, 255,  20), "Full"),
-                    "Medium"=> (12.0, Color.FromRgb(255, 184,   0), "Mid"),
+                    "High"  => (18.0, Color.FromRgb( 57, 255,  20), "High"),
+                    "Mid"   => (12.0, Color.FromRgb(255, 184,   0), "Mid"),
                     "Low"   => ( 5.0, Color.FromRgb(255,  58,  82), "Low!"),
                     "Empty" => ( 2.0, Color.FromRgb(255,  58,  82), "Empty"),
                     _       => ( 0.0, Color.FromRgb( 85,  94, 106), "–")
@@ -143,6 +174,7 @@ namespace RagnaController
                 BatteryLevelText.Foreground = new SolidColorBrush(fillColor);
             });
 
+            // --- Controller-Name + Disconnect ---
             _engine.ControllerConnected += name => Dispatcher.Invoke(() =>
             {
                 if (ControllerNameText != null)
@@ -152,7 +184,6 @@ namespace RagnaController
                     ControllerNameText.Tag        = true;
                 }
             });
-
             _engine.ControllerDisconnected += () => Dispatcher.Invoke(() =>
             {
                 if (ControllerNameText != null)
@@ -165,11 +196,11 @@ namespace RagnaController
                 if (BatteryLevelText != null) BatteryLevelText.Text = "–";
             });
 
+            // Controller escape from Mini-Mode click-through trap (Start + Back)
             _engine.RestoreMainWindowRequested += () => Dispatcher.Invoke(() =>
             {
                 if (_isMiniMode) SwitchFromMiniMode();
             });
-
             this.Loaded += (s, e) =>
             {
                 _suppressSliders = true;
@@ -196,8 +227,10 @@ namespace RagnaController
                 UpdateToggleVisual();
                 UpdateEngine();
 
+                // StartInMiniMode
                 if (_settings.StartInMiniMode) SwitchToMiniMode();
 
+                // Update-Check im Hintergrund
                 _ = Core.UpdateChecker.CheckAndNotifyAsync(this);
             };
         }
@@ -207,19 +240,9 @@ namespace RagnaController
         // --------------------------------------------------------
         public void SwitchFromMiniMode()
         {
-            if (!_isMiniMode) return;
             _isMiniMode = false;
-            
-            if (_miniWindow != null)
-            {
-                _miniWindow.Close();
-                _miniWindow = null;
-            }
-            
-            Show(); 
-            WindowState = WindowState.Normal; 
-            Activate();
-            Focus();
+            Show(); WindowState = WindowState.Normal; Activate();
+            _miniWindow = null;
         }
 
         private void SwitchToMiniMode()
@@ -299,6 +322,7 @@ namespace RagnaController
                 if (InfoTips      != null) InfoTips.Text         = p.ClassTips;
                 if (InfoSkillList != null) InfoSkillList.ItemsSource = p.SkillRecommendations;
                 BuildMappingTables(p);
+                SetTab("Base"); // reset to BASE tab on profile switch
             }
         }
 
@@ -327,11 +351,11 @@ namespace RagnaController
 
             string label = a.TurboEnabled ? $"{a.Label} ⚡" : a.Label;
             var fg  = a.TurboEnabled
-                ? new SolidColorBrush(Color.FromRgb(229, 184, 66)) 
+                ? new SolidColorBrush(Color.FromRgb(229, 184, 66))  // Gold for turbo
                 : Brushes.White;
             var lbl = new TextBlock { Text = label, Foreground = fg, FontSize = 11 };
             if (a.TurboEnabled)
-                lbl.ToolTip = $"Turbo aktiv — {1000.0 / Math.Max(a.TurboIntervalMs, 1):F1}/sec ({a.TurboIntervalMs}ms)";
+                lbl.ToolTip = $"Turbo active — {1000.0 / Math.Max(a.TurboIntervalMs, 1):F1}/sec ({a.TurboIntervalMs}ms)";
 
             Grid.SetColumn(lbl, 1);
             g.Children.Add(lbl);
@@ -374,6 +398,7 @@ namespace RagnaController
             }
         }
 
+        // --- Combo-Sequenz-Editor ---
         private void BtnCombo_Click(object s, RoutedEventArgs e)
         {
             if (ProfileCombo.SelectedItem is Profile p)
@@ -382,16 +407,18 @@ namespace RagnaController
                 if (win.ShowDialog() == true)
                 {
                     _manager.SaveProfile(p);
-                    _engine.LoadProfile(p);
+                    _engine.LoadProfile(p); // Apply updated combo sequence live
                 }
             }
         }
 
+        // Profile Library
         private void BtnLibrary_Click(object s, RoutedEventArgs e)
         {
             var win = new ProfileLibraryWindow(_manager) { Owner = this };
             if (win.ShowDialog() == true && win.SelectedProfile != null)
             {
+                // Load profile from library and select it in the combo box
                 var existing = _manager.Profiles.FirstOrDefault(p => p.Name == win.SelectedProfile.Name);
                 if (existing != null) ProfileCombo.SelectedItem = existing;
             }
@@ -458,6 +485,8 @@ namespace RagnaController
             if (!_suppressSliders) { _engine.LiveUpdateDeadzone((float)e.NewValue); MarkDirty(); }
         }
 
+        // Deadzone ring: the visualizer is 50×50px and represents -1..+1 range (radius = 25px).
+        // ring diameter = deadzone * 2 * 25 = deadzone * 50
         private void UpdateDeadzoneRing(float deadzone)
         {
             double diameter = Math.Max(4, deadzone * 50.0);
@@ -468,6 +497,7 @@ namespace RagnaController
         private void ActionSpeedSlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e) { if (ActionSpeedValue != null) ActionSpeedValue.Text = e.NewValue.ToString("F2"); if (!_suppressSliders) { _engine.LiveUpdateActionSpeed((float)e.NewValue);    MarkDirty(); } }
         private void SensitivitySlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e) { if (SensitivityValue != null) SensitivityValue.Text = e.NewValue.ToString("F0"); if (!_suppressSliders) { _engine.LiveUpdateCursorSpeed((float)e.NewValue);   MarkDirty(); } }
 
+        // Double-click slider label to reset to profile default
         private void DeadzoneLabel_DblClick(object s, MouseButtonEventArgs e)
         {
             if (e.ClickCount != 2) return;
@@ -484,11 +514,13 @@ namespace RagnaController
         private void ActionSpeedLabel_DblClick(object s, MouseButtonEventArgs e) { if (e.ClickCount != 2) return; if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; ActionSpeedSlider.Value  = p.ActionSpeed;     _suppressSliders = false; _engine.LiveUpdateActionSpeed((float)p.ActionSpeed); } }
         private void SensitivityLabel_DblClick(object s, MouseButtonEventArgs e) { if (e.ClickCount != 2) return; if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; SensitivitySlider.Value  = p.CursorMaxSpeed;  _suppressSliders = false; _engine.LiveUpdateCursorSpeed((float)p.CursorMaxSpeed); } }
 
+        // ↺ Reset button Click handlers (RoutedEventArgs — separate from the double-click TextBlock handlers)
         private void DeadzoneReset_Click(object s, RoutedEventArgs e)     { if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; DeadzoneSlider.Value     = p.Deadzone;        _suppressSliders = false; _engine.LiveUpdateDeadzone((float)p.Deadzone);         UpdateDeadzoneRing((float)p.Deadzone); } }
         private void CurveReset_Click(object s, RoutedEventArgs e)        { if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; CurveSlider.Value        = p.MovementCurve;   _suppressSliders = false; _engine.LiveUpdateCurve((float)p.MovementCurve); } }
         private void ActionSpeedReset_Click(object s, RoutedEventArgs e)  { if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; ActionSpeedSlider.Value  = p.ActionSpeed;     _suppressSliders = false; _engine.LiveUpdateActionSpeed((float)p.ActionSpeed); } }
         private void SensitivityReset_Click(object s, RoutedEventArgs e)  { if (ProfileCombo?.SelectedItem is Profile p) { _suppressSliders = true; SensitivitySlider.Value  = p.CursorMaxSpeed;  _suppressSliders = false; _engine.LiveUpdateCursorSpeed((float)p.CursorMaxSpeed); } }
 
+        // ── Dirty flag (unsaved changes) ────────────────────────
         private void MarkDirty()
         {
             if (_isDirty) return;
@@ -500,10 +532,12 @@ namespace RagnaController
         private void ClearDirty()
         {
             _isDirty = false;
+            // Sternchen entfernen
             if (ClassBadgeText != null)
                 ClassBadgeText.Text = ClassBadgeText.Text.TrimEnd('*', ' ');
         }
 
+        // ── Admin-Check ─────────────────────────────────────────────────
         private static bool IsRunningAsAdmin()
         {
             try
@@ -527,7 +561,7 @@ namespace RagnaController
                 });
                 Application.Current.Shutdown();
             }
-            catch { }
+            catch { /* Nutzer hat UAC abgebrochen */ }
         }
 
         // --------------------------------------------------------
@@ -552,6 +586,7 @@ namespace RagnaController
             PanelInfo.Visibility = t == "Info" ? Visibility.Visible : Visibility.Collapsed;
             PanelLog.Visibility  = t == "Log"  ? Visibility.Visible : Visibility.Collapsed;
 
+            // Update tab button styles — active tab gets gold underline, others get ghost style
             var normal = (Style)FindResource("TabButton");
             var active = (Style)FindResource("TabButtonActive");
             if (TabBtnBase != null) TabBtnBase.Style = t == "Base" ? active : normal;
@@ -564,7 +599,7 @@ namespace RagnaController
         }
 
         // --------------------------------------------------------
-        //  Log Tab
+        //  Log Tab — Clear + Export
         // --------------------------------------------------------
         private void BtnLogClear_Click(object s, RoutedEventArgs e)
         {
@@ -584,7 +619,7 @@ namespace RagnaController
 
             var filtered = _logBuffer.Where(line =>
             {
-                if (showErrors  && (line.Contains("ERR") || line.Contains("⚠") || line.Contains("getrennt"))) return true;
+                if (showErrors  && (line.Contains("ERR") || line.Contains("⚠") || line.Contains("disconnected"))) return true;
                 if (showProfile && (line.Contains("Profil") || line.Contains("profil") || line.Contains("Layer") || line.Contains("Controller verbunden"))) return true;
                 if (showInput   && (line.Contains("Taste") || line.Contains("Click") || line.Contains("Key") || line.Contains("Turbo"))) return true;
                 if (showEngine  && !(line.Contains("Profil") || line.Contains("Taste") || line.Contains("ERR") || line.Contains("⚠"))) return true;
@@ -600,14 +635,14 @@ namespace RagnaController
             if (string.IsNullOrWhiteSpace(text)) return;
             var dlg = new Microsoft.Win32.SaveFileDialog
             {
-                Title  = "Log exportieren",
+                Title  = "Export log",
                 Filter = "Textdatei|*.txt",
                 FileName = $"RagnaController_Log_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt"
             };
             if (dlg.ShowDialog() == true)
             {
                 try { File.WriteAllText(dlg.FileName, text); }
-                catch (Exception ex) { MessageBox.Show("Export fehlgeschlagen: " + ex.Message); }
+                catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
             }
         }
     }

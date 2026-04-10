@@ -90,7 +90,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="EmoteStatusText"
                                        Grid.Column="0"
-                                       Text="Emoji-Fallback aktiv"
+                                       Text="Emoji fallback active"
                                        Foreground="#7D8B9E" FontSize="10" FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
                             <Button Grid.Column="1"
